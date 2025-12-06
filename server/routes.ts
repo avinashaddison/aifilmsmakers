@@ -284,7 +284,16 @@ export async function registerRoutes(
 
   app.post("/api/text-to-video", async (req, res) => {
     try {
-      const { prompt, duration = 10, resolution = "1080p" } = req.body;
+      const { 
+        prompt, 
+        duration = 10, 
+        resolution = "1080p",
+        model = "sora-2",
+        aspect_ratio = "16:9",
+        add_audio = false,
+        audio_prompt,
+        image_url
+      } = req.body;
 
       if (!prompt || typeof prompt !== "string") {
         res.status(400).json({ error: "Prompt is required" });
@@ -300,10 +309,31 @@ export async function registerRoutes(
       const videoRecord = await storage.createGeneratedVideo({
         prompt,
         duration: parseInt(duration),
-        resolution: "1080p",
-        model: "sora-2",
+        resolution,
+        model,
         status: "processing"
       });
+
+      // Build request body
+      const requestBody: any = {
+        model,
+        prompt,
+        duration: parseInt(duration),
+        resolution,
+        aspect_ratio
+      };
+
+      // Add optional parameters
+      if (add_audio) {
+        requestBody.add_audio = true;
+        if (audio_prompt) {
+          requestBody.audio_prompt = audio_prompt;
+        }
+      }
+
+      if (image_url) {
+        requestBody.image_url = image_url;
+      }
 
       const response = await fetch("https://videogenapi.com/api/v1/generate", {
         method: "POST",
@@ -311,12 +341,7 @@ export async function registerRoutes(
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          model: "sora-2",
-          prompt,
-          duration: parseInt(duration),
-          resolution: "1080p"
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -331,14 +356,14 @@ export async function registerRoutes(
       
       // Update the record with the result
       await storage.updateGeneratedVideo(videoRecord.id, {
-        externalId: result.id || result.video_id,
+        externalId: result.id || result.video_id || result.generation_id,
         videoUrl: result.video_url || result.url,
         status: result.video_url || result.url ? "completed" : "processing"
       });
       
       res.json({
         id: videoRecord.id,
-        externalId: result.id || result.video_id,
+        externalId: result.id || result.video_id || result.generation_id,
         status: result.video_url || result.url ? "completed" : "processing",
         videoUrl: result.video_url || result.url,
         message: result.message || "Video generation started"
@@ -346,6 +371,62 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Text-to-video error:", error);
       res.status(500).json({ error: "Failed to generate video" });
+    }
+  });
+
+  // Check video generation status
+  app.get("/api/videos/:id/check-status", async (req, res) => {
+    try {
+      const video = await storage.getGeneratedVideo(req.params.id);
+      if (!video) {
+        res.status(404).json({ error: "Video not found" });
+        return;
+      }
+
+      // If already completed or failed, return current status
+      if (video.status === "completed" || video.status === "failed") {
+        res.json(video);
+        return;
+      }
+
+      // If we have an external ID, check status with VideogenAPI
+      if (video.externalId) {
+        const apiKey = process.env.VIDEOGEN_API_KEY;
+        if (!apiKey) {
+          throw new Error("VIDEOGEN_API_KEY not configured");
+        }
+
+        const response = await fetch(`https://videogenapi.com/api/v1/status/${video.externalId}`, {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          
+          // Update local record if video is ready
+          if (result.video_url || result.url) {
+            await storage.updateGeneratedVideo(req.params.id, {
+              videoUrl: result.video_url || result.url,
+              status: "completed"
+            });
+          } else if (result.status === "failed" || result.status === "error") {
+            await storage.updateGeneratedVideo(req.params.id, {
+              status: "failed"
+            });
+          }
+          
+          const updatedVideo = await storage.getGeneratedVideo(req.params.id);
+          res.json(updatedVideo);
+          return;
+        }
+      }
+
+      res.json(video);
+    } catch (error) {
+      console.error("Status check error:", error);
+      res.status(500).json({ error: "Failed to check status" });
     }
   });
 

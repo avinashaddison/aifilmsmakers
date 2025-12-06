@@ -19,10 +19,6 @@ externalPort = 80
 localPort = 34271
 externalPort = 3000
 
-[[ports]]
-localPort = 46075
-externalPort = 3001
-
 [env]
 PORT = "5000"
 
@@ -49,3 +45,9 @@ waitForPort = 5000
 
 [agent]
 mockupState = "FULLSTACK"
+integrations = ["javascript_anthropic_ai_integrations:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+VIDEOGEN_API_KEY = "lannetech_eebce8b12d00c5fca0a49c79d436db9e0316599f510147938715cc4763a1d109"

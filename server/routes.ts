@@ -3,6 +3,99 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } from "@shared/schema";
 import { z } from "zod";
+import Anthropic from "@anthropic-ai/sdk";
+
+const anthropic = new Anthropic({
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+});
+
+async function generateStoryFramework(filmTitle: string) {
+  const prompt = `You are a professional film writer. Create a complete story framework for a film titled "${filmTitle}".
+
+Generate a JSON response with the following structure:
+{
+  "premise": "A 2-3 sentence premise of the film",
+  "hook": "A compelling opening hook (1-2 sentences)",
+  "genre": "The primary genre (e.g., Sci-Fi, Drama, Thriller, etc.)",
+  "tone": "The overall tone (e.g., Dark, Uplifting, Mysterious, etc.)",
+  "setting": {
+    "location": "Primary location",
+    "time": "Time period",
+    "weather": "Weather/climate",
+    "atmosphere": "Overall atmosphere"
+  },
+  "characters": [
+    {
+      "name": "Character name",
+      "age": 30,
+      "role": "protagonist/antagonist/supporting",
+      "description": "Brief character description",
+      "actor": "Suggested actor type or name"
+    }
+  ]
+}
+
+Make it cinematic, compelling, and suitable for video generation. Include 3-5 main characters.`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 2000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = message.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from Claude");
+  }
+
+  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Could not parse JSON from Claude response");
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
+
+async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5) {
+  const prompt = `You are a professional film writer. Based on the following film framework, create ${numberOfChapters} chapters that tell a complete story.
+
+Film Title: ${filmTitle}
+Premise: ${framework.premise}
+Genre: ${framework.genre}
+Tone: ${framework.tone}
+Characters: ${framework.characters.map((c: any) => `${c.name} (${c.role})`).join(", ")}
+
+Generate a JSON array of ${numberOfChapters} chapters with this structure:
+[
+  {
+    "chapterNumber": 1,
+    "title": "Chapter title",
+    "summary": "3-4 sentence summary of what happens in this chapter",
+    "prompt": "Detailed visual description for video generation (50-100 words). Include: camera angles, lighting, action, mood, characters visible, environment details. Be specific and cinematic."
+  }
+]
+
+Ensure the chapters flow naturally, build tension, and create a complete narrative arc with beginning, middle, and end.`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 3000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = message.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from Claude");
+  }
+
+  const jsonMatch = content.text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    throw new Error("Could not parse JSON from Claude response");
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -67,30 +160,66 @@ export async function registerRoutes(
 
       await storage.updateFilmStatus(req.params.id, "generating");
 
+      const generatedFramework = await generateStoryFramework(film.title);
+
       const framework = await storage.createStoryFramework({
         filmId: req.params.id,
-        premise: req.body.premise || "A compelling story unfolds...",
-        hook: req.body.hook || "An intriguing beginning...",
-        genre: req.body.genre || "Drama",
-        tone: req.body.tone || "Mysterious",
-        setting: req.body.setting || {
-          location: "Unknown",
-          time: "Present",
-          weather: "Clear",
-          atmosphere: "Tense"
-        },
-        characters: req.body.characters || []
+        ...generatedFramework
       });
 
       await storage.updateFilmStatus(req.params.id, "draft");
 
       res.json(framework);
     } catch (error) {
+      await storage.updateFilmStatus(req.params.id, "draft");
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: "Invalid request data", details: error.errors });
       } else {
+        console.error("Framework generation error:", error);
         res.status(500).json({ error: "Failed to generate story framework" });
       }
+    }
+  });
+
+  app.post("/api/films/:id/generate-chapters", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const framework = await storage.getStoryFrameworkByFilmId(req.params.id);
+      if (!framework) {
+        res.status(404).json({ error: "Story framework not found. Generate framework first." });
+        return;
+      }
+
+      await storage.updateFilmStatus(req.params.id, "generating");
+
+      const numberOfChapters = req.body.numberOfChapters || 5;
+      const generatedChapters = await generateChapters(film.title, framework, numberOfChapters);
+
+      const createdChapters = [];
+      for (const chapter of generatedChapters) {
+        const created = await storage.createChapter({
+          filmId: req.params.id,
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          summary: chapter.summary,
+          prompt: chapter.prompt,
+          status: "pending"
+        });
+        createdChapters.push(created);
+      }
+
+      await storage.updateFilmStatus(req.params.id, "draft");
+
+      res.json(createdChapters);
+    } catch (error) {
+      await storage.updateFilmStatus(req.params.id, "draft");
+      console.error("Chapter generation error:", error);
+      res.status(500).json({ error: "Failed to generate chapters" });
     }
   });
 
@@ -161,11 +290,57 @@ export async function registerRoutes(
         return;
       }
 
+      if (!chapter.prompt) {
+        res.status(400).json({ error: "Chapter does not have a prompt for video generation" });
+        return;
+      }
+
       await storage.updateChapter(req.params.id, { status: "generating" });
 
-      res.json({ message: "Video generation started", chapterId: req.params.id });
+      const apiKey = process.env.VIDEOGEN_API_KEY;
+      if (!apiKey) {
+        throw new Error("VIDEOGEN_API_KEY not configured");
+      }
+
+      const response = await fetch("https://videogenapi.com/api/v1/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "seedance",
+          prompt: chapter.prompt,
+          duration: 10,
+          resolution: "720p"
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("VideogenAPI error:", errorText);
+        await storage.updateChapter(req.params.id, { status: "failed" });
+        res.status(500).json({ error: "Video generation failed", details: errorText });
+        return;
+      }
+
+      const result = await response.json();
+      
+      await storage.updateChapter(req.params.id, { 
+        status: "completed",
+        videoUrl: result.video_url || result.url,
+        metadata: {
+          ...chapter.metadata,
+          resolution: "720p"
+        }
+      });
+
+      const updatedChapter = await storage.getChapter(req.params.id);
+      res.json(updatedChapter);
     } catch (error) {
-      res.status(500).json({ error: "Failed to start video generation" });
+      console.error("Video generation error:", error);
+      await storage.updateChapter(req.params.id, { status: "failed" });
+      res.status(500).json({ error: "Failed to generate video" });
     }
   });
 

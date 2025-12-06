@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Video, Download, Play, Clock, Loader2, Film, Trash2 } from "lucide-react";
+import { Video, Download, Play, Clock, Loader2, Film, Trash2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -20,11 +20,113 @@ export default function VideoLibrary() {
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
   const { toast } = useToast();
+  const pollingIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  const checkVideoStatus = useCallback(async (videoId: string, showToast = false) => {
+    try {
+      const response = await fetch(`/api/videos/${videoId}/check-status`);
+      if (!response.ok) {
+        throw new Error('Failed to check status');
+      }
+      
+      const data = await response.json();
+      
+      setVideos(prev => prev.map(v => 
+        v.id === videoId 
+          ? { ...v, status: data.status, videoUrl: data.videoUrl || v.videoUrl }
+          : v
+      ));
+      
+      setSelectedVideo(prev => 
+        prev?.id === videoId 
+          ? { ...prev, status: data.status, videoUrl: data.videoUrl || prev.videoUrl } 
+          : prev
+      );
+      
+      if (data.status === "completed") {
+        const interval = pollingIntervalsRef.current.get(videoId);
+        if (interval) {
+          clearInterval(interval);
+          pollingIntervalsRef.current.delete(videoId);
+        }
+        
+        if (showToast) {
+          toast({
+            title: "Video Ready",
+            description: "Your video has finished processing!",
+          });
+        }
+      } else if (data.status === "failed") {
+        const interval = pollingIntervalsRef.current.get(videoId);
+        if (interval) {
+          clearInterval(interval);
+          pollingIntervalsRef.current.delete(videoId);
+        }
+        
+        if (showToast) {
+          toast({
+            variant: "destructive",
+            title: "Video Failed",
+            description: "Video generation failed. Please try again.",
+          });
+        }
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error checking video status:', error);
+      return null;
+    }
+  }, [toast]);
+
+  const startPollingForVideo = useCallback((videoId: string) => {
+    if (pollingIntervalsRef.current.has(videoId)) {
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      checkVideoStatus(videoId, true);
+    }, 5000);
+    
+    pollingIntervalsRef.current.set(videoId, interval);
+  }, [checkVideoStatus]);
 
   useEffect(() => {
     fetchVideos();
+    
+    return () => {
+      pollingIntervalsRef.current.forEach((interval) => {
+        clearInterval(interval);
+      });
+      pollingIntervalsRef.current.clear();
+    };
   }, []);
+
+  useEffect(() => {
+    const processingVideos = videos.filter(v => v.status === "processing");
+    
+    processingVideos.forEach(video => {
+      if (!pollingIntervalsRef.current.has(video.id)) {
+        startPollingForVideo(video.id);
+      }
+    });
+    
+    pollingIntervalsRef.current.forEach((interval, videoId) => {
+      const video = videos.find(v => v.id === videoId);
+      if (!video || video.status !== "processing") {
+        clearInterval(interval);
+        pollingIntervalsRef.current.delete(videoId);
+      }
+    });
+  }, [videos, startPollingForVideo]);
+
+  const handleManualStatusCheck = async (videoId: string) => {
+    setCheckingStatus(videoId);
+    await checkVideoStatus(videoId, true);
+    setCheckingStatus(null);
+  };
 
   const fetchVideos = async () => {
     try {
@@ -217,6 +319,28 @@ export default function VideoLibrary() {
                         <p className="text-sm text-white">{selectedVideo.model}</p>
                       </div>
                     </div>
+                    
+                    {selectedVideo.status === "processing" && (
+                      <Button 
+                        onClick={() => handleManualStatusCheck(selectedVideo.id)}
+                        disabled={checkingStatus === selectedVideo.id}
+                        variant="outline"
+                        className="w-full border-primary/50 text-primary hover:bg-primary/10"
+                        data-testid="button-check-status"
+                      >
+                        {checkingStatus === selectedVideo.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Checking...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Check Status
+                          </>
+                        )}
+                      </Button>
+                    )}
                     
                     {selectedVideo.videoUrl && (
                       <a 

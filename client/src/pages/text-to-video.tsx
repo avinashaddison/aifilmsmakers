@@ -18,7 +18,7 @@ interface VideoResult {
 export default function TextToVideo() {
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("10");
-  const [resolution, setResolution] = useState("720p");
+  const [resolution, setResolution] = useState("1080p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
   const { toast } = useToast();

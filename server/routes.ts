@@ -303,10 +303,10 @@ export async function registerRoutes(
           "Authorization": `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "seedance",
+          model: "sora-2",
           prompt,
           duration: parseInt(duration),
-          resolution
+          resolution: "1080p"
         })
       });
 
@@ -358,10 +358,10 @@ export async function registerRoutes(
           "Authorization": `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "seedance",
+          model: "sora-2",
           prompt: chapter.prompt,
           duration: 10,
-          resolution: "720p"
+          resolution: "1080p"
         })
       });
 

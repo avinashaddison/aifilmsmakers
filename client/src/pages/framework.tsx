@@ -1,26 +1,127 @@
+import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Edit2, Check } from "lucide-react";
-import { Link } from "wouter";
-import { mockFramework } from "@/lib/mock-data";
+import { ArrowRight, Edit2, Check, Loader2, Plus } from "lucide-react";
+import { Link, useRoute, useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 export default function StoryFramework() {
+  const [, params] = useRoute("/framework/:filmId");
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [framework, setFramework] = useState<any>(null);
+  const [film, setFilm] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingChapters, setIsGeneratingChapters] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!params?.filmId) return;
+
+      try {
+        const [filmRes, frameworkRes] = await Promise.all([
+          fetch(`/api/films/${params.filmId}`),
+          fetch(`/api/films/${params.filmId}/framework`)
+        ]);
+
+        if (filmRes.ok) {
+          setFilm(await filmRes.json());
+        }
+
+        if (frameworkRes.ok) {
+          setFramework(await frameworkRes.json());
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load story framework"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [params?.filmId]);
+
+  const handleGenerateChapters = async () => {
+    if (!params?.filmId) return;
+
+    setIsGeneratingChapters(true);
+    try {
+      const response = await fetch(`/api/films/${params.filmId}/generate-chapters`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numberOfChapters: 5 })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate chapters");
+      }
+
+      toast({
+        title: "Chapters Generated!",
+        description: "Story chapters created successfully"
+      });
+
+      setLocation(`/chapters/${params.filmId}`);
+    } catch (error) {
+      console.error("Error generating chapters:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate chapters"
+      });
+      setIsGeneratingChapters(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!framework) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <p className="text-muted-foreground">Framework not found</p>
+        <Link href="/create">
+          <Button>Create New Film</Button>
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-primary font-medium mb-1 uppercase tracking-widest">Phase 1</p>
           <h1 className="font-display text-3xl md:text-4xl font-bold text-white">Story Framework</h1>
+          {film && <p className="text-muted-foreground mt-1">{film.title}</p>}
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white">
-            <Edit2 className="w-4 h-4 mr-2" /> Edit
+          <Button 
+            className="bg-primary hover:bg-primary/90 text-background font-bold"
+            onClick={handleGenerateChapters}
+            disabled={isGeneratingChapters}
+            data-testid="button-generate-chapters"
+          >
+            {isGeneratingChapters ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...
+              </>
+            ) : (
+              <>
+                Generate Chapters <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
           </Button>
-          <Link href="/chapters">
-            <Button className="bg-primary hover:bg-primary/90 text-background font-bold">
-              Confirm & Generate Chapters <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -31,7 +132,7 @@ export default function StoryFramework() {
             <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
             <h3 className="text-lg font-display font-bold text-white mb-4">Premise</h3>
             <p className="text-lg text-gray-300 leading-relaxed">
-              {mockFramework.premise}
+              {framework.premise}
             </p>
           </GlassCard>
 
@@ -39,7 +140,7 @@ export default function StoryFramework() {
              <div className="absolute top-0 left-0 w-1 h-full bg-secondary" />
             <h3 className="text-lg font-display font-bold text-white mb-2">The Hook</h3>
             <p className="text-2xl font-serif italic text-secondary-foreground/90">
-              "{mockFramework.hook}"
+              "{framework.hook}"
             </p>
           </GlassCard>
 
@@ -47,14 +148,14 @@ export default function StoryFramework() {
             <GlassCard>
               <h3 className="text-sm font-medium text-muted-foreground mb-2 uppercase">Genre</h3>
               <div className="flex flex-wrap gap-2">
-                {mockFramework.genre.split(" ").map((g, i) => (
+                {framework.genre.split(/[,\s]+/).filter(Boolean).map((g: string, i: number) => (
                    <span key={i} className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white text-sm">{g}</span>
                 ))}
               </div>
             </GlassCard>
             <GlassCard>
               <h3 className="text-sm font-medium text-muted-foreground mb-2 uppercase">Tone</h3>
-              <p className="text-white text-lg">{mockFramework.tone}</p>
+              <p className="text-white text-lg">{framework.tone}</p>
             </GlassCard>
           </div>
           
@@ -63,19 +164,19 @@ export default function StoryFramework() {
              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">LOCATION</span>
-                  <span className="text-white">{mockFramework.setting.location}</span>
+                  <span className="text-white">{framework.setting.location}</span>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">TIME</span>
-                  <span className="text-white">{mockFramework.setting.time}</span>
+                  <span className="text-white">{framework.setting.time}</span>
                 </div>
                 <div>
                    <span className="text-xs text-muted-foreground block mb-1">WEATHER</span>
-                   <span className="text-white">{mockFramework.setting.weather}</span>
+                   <span className="text-white">{framework.setting.weather}</span>
                 </div>
                  <div>
                    <span className="text-xs text-muted-foreground block mb-1">ATMOSPHERE</span>
-                   <span className="text-white">{mockFramework.setting.atmosphere}</span>
+                   <span className="text-white">{framework.setting.atmosphere}</span>
                 </div>
              </div>
           </GlassCard>
@@ -85,7 +186,7 @@ export default function StoryFramework() {
         <div className="space-y-6">
           <h2 className="font-display text-xl font-bold text-white">Cast & Characters</h2>
           
-          {mockFramework.characters.map((char, idx) => (
+          {framework.characters.map((char: any, idx: number) => (
             <GlassCard key={idx} className="group hover:border-primary/30 transition-all">
               <div className="flex items-start justify-between mb-2">
                 <div>
@@ -101,22 +202,8 @@ export default function StoryFramework() {
               </div>
             </GlassCard>
           ))}
-
-          <GlassCard className="border-dashed border-white/10 flex items-center justify-center py-8 cursor-pointer hover:bg-white/5 transition-colors">
-             <span className="text-muted-foreground flex items-center gap-2"><Plus className="w-4 h-4" /> Add Character</span>
-          </GlassCard>
         </div>
-      </div>
-      
-      <div className="fixed bottom-8 right-8">
-        <Link href="/chapters">
-            <Button size="lg" className="h-14 px-8 rounded-full bg-primary hover:bg-primary/90 text-background font-bold shadow-[0_0_20px_rgba(0,243,255,0.3)] animate-pulse hover:animate-none">
-              Proceed to Chapters <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-        </Link>
       </div>
     </div>
   );
 }
-
-import { Plus } from "lucide-react";

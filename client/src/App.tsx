@@ -18,11 +18,11 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/create" component={CreateFilm} />
-        <Route path="/framework" component={StoryFramework} />
-        <Route path="/chapters" component={Chapters} />
-        <Route path="/generator" component={VideoGenerator} />
-        <Route path="/assembly" component={Assembly} />
-        <Route path="/download" component={DownloadPage} />
+        <Route path="/framework/:filmId" component={StoryFramework} />
+        <Route path="/chapters/:filmId" component={Chapters} />
+        <Route path="/generator/:filmId" component={VideoGenerator} />
+        <Route path="/assembly/:filmId" component={Assembly} />
+        <Route path="/download/:filmId" component={DownloadPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

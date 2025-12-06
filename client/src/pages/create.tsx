@@ -4,21 +4,55 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Sparkles, ArrowRight, Zap } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CreateFilm() {
   const [isLoading, setIsLoading] = useState(false);
   const [title, setTitle] = useState("");
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!title) return;
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const filmResponse = await fetch("/api/films", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, status: "draft" })
+      });
+
+      if (!filmResponse.ok) {
+        throw new Error("Failed to create film");
+      }
+
+      const film = await filmResponse.json();
+
+      const frameworkResponse = await fetch(`/api/films/${film.id}/framework`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!frameworkResponse.ok) {
+        throw new Error("Failed to generate framework");
+      }
+
+      toast({
+        title: "Film Created!",
+        description: "Story framework generated successfully"
+      });
+
+      setLocation(`/framework/${film.id}`);
+    } catch (error) {
+      console.error("Error creating film:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create film"
+      });
       setIsLoading(false);
-      setLocation("/framework");
-    }, 2000);
+    }
   };
 
   return (
@@ -48,16 +82,18 @@ export default function CreateFilm() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+                data-testid="input-film-title"
               />
               <Button 
                 size="lg" 
                 className="h-16 px-10 text-lg bg-primary hover:bg-primary/90 text-background font-bold shadow-[0_0_20px_rgba(0,243,255,0.3)] hover:shadow-[0_0_40px_rgba(0,243,255,0.5)] transition-all min-w-[200px] tracking-wide"
                 onClick={handleGenerate}
                 disabled={isLoading || !title}
+                data-testid="button-generate-film"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Processing...
+                    <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Generating...
                   </>
                 ) : (
                   <>

@@ -20,10 +20,6 @@ localPort = 34271
 externalPort = 3000
 
 [[ports]]
-localPort = 41985
-externalPort = 3001
-
-[[ports]]
 localPort = 42791
 externalPort = 3002
 
@@ -53,9 +49,14 @@ waitForPort = 5000
 
 [agent]
 mockupState = "FULLSTACK"
-integrations = ["javascript_anthropic_ai_integrations:1.0.0"]
+integrations = ["javascript_anthropic_ai_integrations:1.0.0", "javascript_object_storage:1.0.0"]
 
 [userenv]
 
 [userenv.shared]
 VIDEOGEN_API_KEY = "lannetech_eebce8b12d00c5fca0a49c79d436db9e0316599f510147938715cc4763a1d109"
+PUBLIC_OBJECT_SEARCH_PATHS = "/replit-objstore-7c922408-9a58-4d6d-9677-6d30049aee83/public"
+PRIVATE_OBJECT_DIR = "/replit-objstore-7c922408-9a58-4d6d-9677-6d30049aee83/.private"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-7c922408-9a58-4d6d-9677-6d30049aee83"

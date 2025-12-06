@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Video, Download, Play, Clock, Loader2, Film, Trash2, RefreshCw } from "lucide-react";
+import { Video, Download, Play, Clock, Loader2, Film, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -9,6 +9,7 @@ interface VideoData {
   id: string;
   prompt: string;
   videoUrl: string | null;
+  objectPath: string | null;
   status: string;
   duration: number;
   resolution: string;
@@ -21,6 +22,7 @@ export default function VideoLibrary() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
+  const [downloadingVideo, setDownloadingVideo] = useState<string | null>(null);
   const { toast } = useToast();
   const pollingIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
@@ -35,13 +37,13 @@ export default function VideoLibrary() {
       
       setVideos(prev => prev.map(v => 
         v.id === videoId 
-          ? { ...v, status: data.status, videoUrl: data.videoUrl || v.videoUrl }
+          ? { ...v, status: data.status, videoUrl: data.videoUrl || v.videoUrl, objectPath: data.objectPath || v.objectPath }
           : v
       ));
       
       setSelectedVideo(prev => 
         prev?.id === videoId 
-          ? { ...prev, status: data.status, videoUrl: data.videoUrl || prev.videoUrl } 
+          ? { ...prev, status: data.status, videoUrl: data.videoUrl || prev.videoUrl, objectPath: data.objectPath || prev.objectPath } 
           : prev
       );
       
@@ -55,7 +57,7 @@ export default function VideoLibrary() {
         if (showToast) {
           toast({
             title: "Video Ready",
-            description: "Your video has finished processing!",
+            description: "Your video has finished processing and is ready to view!",
           });
         }
       } else if (data.status === "failed") {
@@ -151,6 +153,48 @@ export default function VideoLibrary() {
     }
   };
 
+  const getVideoSrc = (video: VideoData): string | null => {
+    if (video.objectPath) {
+      return video.objectPath;
+    }
+    return video.videoUrl;
+  };
+
+  const handleDownload = async (video: VideoData) => {
+    try {
+      setDownloadingVideo(video.id);
+      
+      const response = await fetch(`/api/videos/${video.id}/download-url`);
+      if (!response.ok) {
+        throw new Error('Failed to get download URL');
+      }
+      
+      const data = await response.json();
+      
+      const link = document.createElement('a');
+      link.href = data.downloadUrl;
+      link.download = `video-${video.id}.mp4`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Download Started",
+        description: "Your video download has started.",
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Failed to download video. Please try again.",
+      });
+    } finally {
+      setDownloadingVideo(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
       processing: { label: 'Processing', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/20' },
@@ -199,7 +243,6 @@ export default function VideoLibrary() {
         </GlassCard>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Video List */}
           <div className="lg:col-span-2 space-y-4">
             <h2 className="font-display text-xl font-bold text-white">
               {videos.length} Video{videos.length !== 1 ? 's' : ''}
@@ -208,6 +251,7 @@ export default function VideoLibrary() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {videos.map((video) => {
                 const statusBadge = getStatusBadge(video.status);
+                const videoSrc = getVideoSrc(video);
                 
                 return (
                   <GlassCard 
@@ -218,11 +262,12 @@ export default function VideoLibrary() {
                     data-testid={`card-video-${video.id}`}
                   >
                     <div className="aspect-video bg-black/50 rounded-lg mb-3 overflow-hidden flex items-center justify-center relative">
-                      {video.videoUrl ? (
+                      {videoSrc && video.status === "completed" ? (
                         <video 
-                          src={video.videoUrl} 
+                          src={videoSrc} 
                           className="w-full h-full object-cover"
                           muted
+                          preload="metadata"
                           data-testid={`thumbnail-${video.id}`}
                         />
                       ) : (
@@ -230,12 +275,13 @@ export default function VideoLibrary() {
                       )}
                       
                       {video.status === "processing" && (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
                           <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                          <span className="text-xs text-primary/80">Generating...</span>
                         </div>
                       )}
                       
-                      {video.videoUrl && (
+                      {videoSrc && video.status === "completed" && (
                         <div className="absolute inset-0 bg-black/0 hover:bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-all">
                           <Play className="w-12 h-12 text-white" />
                         </div>
@@ -270,7 +316,6 @@ export default function VideoLibrary() {
             </div>
           </div>
           
-          {/* Video Preview Panel */}
           <div className="lg:col-span-1">
             <GlassCard className="sticky top-6">
               <h2 className="font-display text-xl font-bold text-white mb-4">Preview</h2>
@@ -278,25 +323,34 @@ export default function VideoLibrary() {
               {selectedVideo ? (
                 <div className="space-y-4">
                   <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                    {selectedVideo.videoUrl ? (
-                      <video 
-                        src={selectedVideo.videoUrl} 
-                        controls
-                        className="w-full h-full object-contain"
-                        data-testid="video-preview"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        {selectedVideo.status === "processing" ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                            <p className="text-sm text-muted-foreground">Processing...</p>
-                          </div>
-                        ) : (
-                          <Video className="w-12 h-12 text-white/20" />
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      const videoSrc = getVideoSrc(selectedVideo);
+                      if (videoSrc && selectedVideo.status === "completed") {
+                        return (
+                          <video 
+                            key={videoSrc}
+                            src={videoSrc} 
+                            controls
+                            autoPlay
+                            className="w-full h-full object-contain"
+                            data-testid="video-preview"
+                          />
+                        );
+                      }
+                      return (
+                        <div className="w-full h-full flex items-center justify-center">
+                          {selectedVideo.status === "processing" ? (
+                            <div className="flex flex-col items-center gap-3">
+                              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                              <p className="text-sm text-muted-foreground">Generating video...</p>
+                              <p className="text-xs text-muted-foreground/60">This may take a few minutes</p>
+                            </div>
+                          ) : (
+                            <Video className="w-12 h-12 text-white/20" />
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   
                   <div className="space-y-3">
@@ -320,6 +374,12 @@ export default function VideoLibrary() {
                       </div>
                     </div>
                     
+                    {selectedVideo.objectPath && (
+                      <div className="px-2 py-1 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400">
+                        Stored in App Storage
+                      </div>
+                    )}
+                    
                     {selectedVideo.status === "processing" && (
                       <Button 
                         onClick={() => handleManualStatusCheck(selectedVideo.id)}
@@ -342,22 +402,25 @@ export default function VideoLibrary() {
                       </Button>
                     )}
                     
-                    {selectedVideo.videoUrl && (
-                      <a 
-                        href={selectedVideo.videoUrl} 
-                        download 
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block"
+                    {selectedVideo.status === "completed" && (getVideoSrc(selectedVideo)) && (
+                      <Button 
+                        onClick={() => handleDownload(selectedVideo)}
+                        disabled={downloadingVideo === selectedVideo.id}
+                        className="w-full bg-primary hover:bg-primary/90 text-background font-bold"
+                        data-testid="button-download"
                       >
-                        <Button 
-                          className="w-full bg-primary hover:bg-primary/90 text-background font-bold"
-                          data-testid="button-download"
-                        >
-                          <Download className="mr-2 h-4 w-4" />
-                          Download Video
-                        </Button>
-                      </a>
+                        {downloadingVideo === selectedVideo.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Preparing Download...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Video
+                          </>
+                        )}
+                      </Button>
                     )}
                   </div>
                 </div>

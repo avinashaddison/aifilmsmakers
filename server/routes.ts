@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } from "@shared/schema";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -407,10 +408,26 @@ export async function registerRoutes(
           
           // Update local record if video is ready
           if (result.video_url || result.url) {
-            await storage.updateGeneratedVideo(req.params.id, {
-              videoUrl: result.video_url || result.url,
-              status: "completed"
-            });
+            const externalVideoUrl = result.video_url || result.url;
+            
+            // Upload video to Object Storage
+            try {
+              const objectStorageService = new ObjectStorageService();
+              const objectPath = await objectStorageService.uploadVideoFromUrl(externalVideoUrl);
+              
+              await storage.updateGeneratedVideo(req.params.id, {
+                videoUrl: externalVideoUrl,
+                objectPath: objectPath,
+                status: "completed"
+              });
+            } catch (uploadError) {
+              console.error("Failed to upload to object storage:", uploadError);
+              // Still mark as completed even if upload fails
+              await storage.updateGeneratedVideo(req.params.id, {
+                videoUrl: externalVideoUrl,
+                status: "completed"
+              });
+            }
           } else if (result.status === "failed" || result.status === "error") {
             await storage.updateGeneratedVideo(req.params.id, {
               status: "failed"
@@ -451,6 +468,45 @@ export async function registerRoutes(
       res.json(video);
     } catch (error) {
       res.status(500).json({ error: "Failed to get video" });
+    }
+  });
+
+  // Serve videos from Object Storage
+  app.get("/objects/:objectPath(*)", async (req, res) => {
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error serving object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Get signed download URL for a video
+  app.get("/api/videos/:id/download-url", async (req, res) => {
+    try {
+      const video = await storage.getGeneratedVideo(req.params.id);
+      if (!video) {
+        res.status(404).json({ error: "Video not found" });
+        return;
+      }
+
+      if (video.objectPath) {
+        const objectStorageService = new ObjectStorageService();
+        const signedUrl = await objectStorageService.getSignedDownloadUrl(video.objectPath);
+        res.json({ downloadUrl: signedUrl, objectPath: video.objectPath });
+      } else if (video.videoUrl) {
+        res.json({ downloadUrl: video.videoUrl });
+      } else {
+        res.status(404).json({ error: "Video not ready" });
+      }
+    } catch (error) {
+      console.error("Error getting download URL:", error);
+      res.status(500).json({ error: "Failed to get download URL" });
     }
   });
 

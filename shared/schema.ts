@@ -77,6 +77,7 @@ export const generatedVideos = pgTable("generated_videos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   prompt: text("prompt").notNull(),
   videoUrl: text("video_url"),
+  objectPath: text("object_path"),
   status: text("status").notNull().default("processing"), // processing, completed, failed
   duration: integer("duration").notNull().default(10),
   resolution: text("resolution").notNull().default("1080p"),

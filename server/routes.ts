@@ -11,6 +11,37 @@ const anthropic = new Anthropic({
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
+async function generateStoryPreview(filmTitle: string) {
+  const prompt = `You are a professional film writer. Based on the film title "${filmTitle}", generate a quick preview with:
+
+Generate a JSON response with this exact structure:
+{
+  "genres": ["Primary Genre", "Secondary Genre"],
+  "premise": "A compelling 2-3 sentence premise of the film",
+  "openingHook": "An attention-grabbing opening hook that draws viewers in (1-2 sentences)"
+}
+
+Make it cinematic, emotionally engaging, and suitable for video adaptation.`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 500,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = message.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from Claude");
+  }
+
+  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Could not parse JSON from Claude response");
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
+
 async function generateStoryFramework(filmTitle: string) {
   const prompt = `You are a professional film writer. Create a complete story framework for a film titled "${filmTitle}".
 
@@ -58,7 +89,7 @@ Make it cinematic, compelling, and suitable for video generation. Include 3-5 ma
   return JSON.parse(jsonMatch[0]);
 }
 
-async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5) {
+async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5, wordsPerChapter: number = 500) {
   const prompt = `You are a professional film writer. Based on the following film framework, create ${numberOfChapters} chapters that tell a complete story.
 
 Film Title: ${filmTitle}
@@ -72,16 +103,19 @@ Generate a JSON array of ${numberOfChapters} chapters with this structure:
   {
     "chapterNumber": 1,
     "title": "Chapter title",
-    "summary": "3-4 sentence summary of what happens in this chapter",
+    "summary": "A detailed summary of approximately ${wordsPerChapter} words describing what happens in this chapter. Include dialogue, emotions, actions, and scene descriptions.",
     "prompt": "Detailed visual description for video generation (50-100 words). Include: camera angles, lighting, action, mood, characters visible, environment details. Be specific and cinematic."
   }
 ]
 
+IMPORTANT: Each chapter summary must be approximately ${wordsPerChapter} words long. Create rich, detailed narrative content suitable for a film script.
+
 Ensure the chapters flow naturally, build tension, and create a complete narrative arc with beginning, middle, and end.`;
 
+  const maxTokens = Math.max(4000, numberOfChapters * wordsPerChapter * 2);
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
-    max_tokens: 3000,
+    max_tokens: Math.min(maxTokens, 16000),
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -135,6 +169,22 @@ export async function registerRoutes(
       res.json(film);
     } catch (error) {
       res.status(500).json({ error: "Failed to get film" });
+    }
+  });
+
+  app.post("/api/preview-story", async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title || typeof title !== "string") {
+        res.status(400).json({ error: "Title is required" });
+        return;
+      }
+
+      const preview = await generateStoryPreview(title);
+      res.json(preview);
+    } catch (error) {
+      console.error("Story preview error:", error);
+      res.status(500).json({ error: "Failed to generate story preview" });
     }
   });
 
@@ -198,8 +248,9 @@ export async function registerRoutes(
 
       await storage.updateFilmStatus(req.params.id, "generating");
 
-      const numberOfChapters = req.body.numberOfChapters || 5;
-      const generatedChapters = await generateChapters(film.title, framework, numberOfChapters);
+      const numberOfChapters = req.body.numberOfChapters || film.chapterCount || 5;
+      const wordsPerChapter = film.wordsPerChapter || 500;
+      const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
 
       const createdChapters = [];
       for (const chapter of generatedChapters) {

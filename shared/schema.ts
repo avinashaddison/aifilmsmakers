@@ -3,17 +3,56 @@ import { pgTable, text, varchar, jsonb, integer, timestamp } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Film configuration types
+export const NARRATOR_VOICES = [
+  "male-narrator",
+  "female-narrator", 
+  "dramatic-male",
+  "dramatic-female",
+  "neutral",
+  "documentary"
+] as const;
+
+export const STORY_LENGTHS = [
+  "short", // 3-5 chapters
+  "medium", // 6-12 chapters
+  "long", // 13-18 chapters
+  "custom" // user-defined
+] as const;
+
+export const VIDEO_MODELS = [
+  "sora-2",
+  "minimax-video-01",
+  "veo-2",
+  "kling-video",
+  "runway-gen-3"
+] as const;
+
 // Films table
 export const films = pgTable("films", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   status: text("status").notNull().default("draft"), // draft, generating, completed
+  narratorVoice: text("narrator_voice").default("male-narrator"),
+  storyLength: text("story_length").default("medium"),
+  chapterCount: integer("chapter_count").default(5),
+  wordsPerChapter: integer("words_per_chapter").default(500),
+  videoModel: text("video_model").default("sora-2"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertFilmSchema = createInsertSchema(films).omit({ id: true, createdAt: true });
+export const insertFilmSchema = createInsertSchema(films).omit({ id: true, createdAt: true }).extend({
+  narratorVoice: z.string().optional(),
+  storyLength: z.string().optional(),
+  chapterCount: z.number().optional(),
+  wordsPerChapter: z.number().optional(),
+  videoModel: z.string().optional(),
+});
 export type InsertFilm = z.infer<typeof insertFilmSchema>;
 export type Film = typeof films.$inferSelect;
+export type NarratorVoice = typeof NARRATOR_VOICES[number];
+export type StoryLength = typeof STORY_LENGTHS[number];
+export type VideoModel = typeof VIDEO_MODELS[number];
 
 // Story Frameworks table
 export const storyFrameworks = pgTable("story_frameworks", {

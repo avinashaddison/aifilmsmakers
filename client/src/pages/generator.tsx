@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play, RefreshCw, Download, Settings2, ChevronLeft, ChevronRight, Maximize2, AlertCircle } from "lucide-react";
-import { Link } from "wouter";
-import { mockChapters } from "@/lib/mock-data";
+import { ArrowRight, Play, RefreshCw, Download, Settings2, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { Link, useRoute, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,41 +10,108 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 
+interface Chapter {
+  id: number;
+  filmId: number;
+  chapterNumber: number;
+  title: string;
+  summary: string;
+  prompt: string;
+  status: string;
+  videoUrl: string | null;
+  duration: number | null;
+  metadata: any;
+}
+
 export default function VideoGenerator() {
+  const [, params] = useRoute("/generator/:filmId");
+  const [location] = useLocation();
+  const filmId = params?.filmId;
+  
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [activeChapter, setActiveChapter] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [prompt, setPrompt] = useState("Cinematic tracking shot, dark rainy cyberpunk street, neon reflections, protagonist walking away from camera, hooded figure, high contrast, 8k, unreal engine 5 style.");
+  const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState("seedance");
   const [resolution, setResolution] = useState("720p");
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (filmId) {
+      fetchChapters();
+    }
+  }, [filmId]);
+
+  useEffect(() => {
+    // Get chapter number from URL query if provided
+    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const chapterParam = urlParams.get('chapter');
+    if (chapterParam && chapters.length > 0) {
+      const chapterIndex = chapters.findIndex(c => c.chapterNumber === parseInt(chapterParam));
+      if (chapterIndex !== -1) {
+        setActiveChapter(chapterIndex);
+      }
+    }
+  }, [location, chapters]);
+
+  useEffect(() => {
+    if (chapters[activeChapter]) {
+      setPrompt(chapters[activeChapter].prompt || "Cinematic tracking shot, dark rainy cyberpunk street, neon reflections, protagonist walking away from camera, hooded figure, high contrast, 8k, unreal engine 5 style.");
+      setGeneratedVideoUrl(chapters[activeChapter].videoUrl);
+    }
+  }, [activeChapter, chapters]);
+
+  const fetchChapters = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/films/${filmId}/chapters`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch chapters');
+      }
+
+      const data = await response.json();
+      setChapters(data);
+    } catch (error: any) {
+      console.error('Error fetching chapters:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to load chapters",
+        description: error.message || "Please try again",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleGenerate = async () => {
+    if (!chapters[activeChapter]) return;
+
     setIsGenerating(true);
     setProgress(0);
     setGeneratedVideoUrl(null);
 
     try {
-      // Start progress simulation for better UX
       const interval = setInterval(() => {
         setProgress(p => {
-          if (p >= 90) return 90; // Hold at 90% until real response comes back or fails
+          if (p >= 90) return 90;
           return p + 5;
         });
       }, 500);
 
-      const response = await fetch("https://videogenapi.com/api/v1/generate", {
+      const response = await fetch(`/api/chapters/${chapters[activeChapter].id}/generate-video`, {
         method: "POST",
         headers: {
-          "Authorization": "Bearer lannetech_eebce8b12d00c5fca0a49c79d436db9e0316599f510147938715cc4763a1d109",
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: model,
           prompt: prompt,
-          duration: 10,
-          resolution: resolution
+          model: model,
+          resolution: resolution,
+          duration: 10
         })
       });
 
@@ -57,71 +123,96 @@ export default function VideoGenerator() {
       }
 
       const data = await response.json();
-      
-      // Assuming the API returns { url: "..." } or similar based on typical video gen APIs
-      // If the structure is different, we'll need to adjust.
-      // For now, if successful, we'll mock the success completion
       setProgress(100);
       
-      if (data.url) {
-         setGeneratedVideoUrl(data.url);
-      } else {
-         // Fallback if the API response structure is unknown but successful
-         console.log("API Response:", data);
-         toast({
-           title: "Generation Successful",
-           description: "Video generated successfully (Check console for response data)",
-         });
+      if (data.videoUrl) {
+        setGeneratedVideoUrl(data.videoUrl);
+        toast({
+          title: "Video Generated!",
+          description: "Your video has been generated successfully",
+        });
+        
+        // Update chapter in list
+        setChapters(prev => prev.map((ch, idx) => 
+          idx === activeChapter 
+            ? { ...ch, videoUrl: data.videoUrl, status: 'completed' }
+            : ch
+        ));
       }
 
     } catch (error: any) {
       console.error("Generation failed:", error);
+      setProgress(0);
       
-      // Since this is likely to fail with CORS in a browser environment without a proxy,
-      // we will catch the error and simulate a success for the prototype/demo experience
-      // BUT we inform the user via toast that it was a simulation due to browser restrictions
-      
-      if (error.message.includes("Failed to fetch") || error.name === 'TypeError') {
-         toast({
-           variant: "destructive",
-           title: "Network Error (CORS)",
-           description: "Direct API calls from browser blocked. In a production app, this would go through a backend proxy.",
-         });
-      } else {
-         toast({
-           variant: "destructive",
-           title: "Generation Failed",
-           description: error.message || "Unknown error occurred",
-         });
-      }
-      
-      // For prototype purposes, we finish the progress bar to show the "success state" UI
-      // even if the API call technically failed due to environment restrictions.
-      setProgress(100);
+      toast({
+        variant: "destructive",
+        title: "Generation Failed",
+        description: error.message || "Please try again",
+      });
       
     } finally {
       setIsGenerating(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
+          <p className="text-muted-foreground">Loading chapters...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (chapters.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-muted-foreground mb-4">No chapters found</p>
+          <Link href={`/chapters/${filmId}`}>
+            <Button>Go to Chapters</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setActiveChapter(Math.max(0, activeChapter - 1))}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setActiveChapter(Math.max(0, activeChapter - 1))}
+            disabled={activeChapter === 0}
+            data-testid="button-previous-chapter"
+          >
              <ChevronLeft className="w-5 h-5" />
           </Button>
           <div>
-            <p className="text-xs text-primary font-medium uppercase tracking-widest">Chapter {activeChapter + 1} of {mockChapters.length}</p>
-            <h1 className="font-display text-2xl font-bold text-white">{mockChapters[activeChapter].title.split(": ")[1]}</h1>
+            <p className="text-xs text-primary font-medium uppercase tracking-widest" data-testid="text-chapter-info">
+              Chapter {activeChapter + 1} of {chapters.length}
+            </p>
+            <h1 className="font-display text-2xl font-bold text-white" data-testid="text-chapter-title">
+              {chapters[activeChapter]?.title || 'Loading...'}
+            </h1>
           </div>
-           <Button variant="ghost" size="icon" onClick={() => setActiveChapter(Math.min(mockChapters.length - 1, activeChapter + 1))}>
+           <Button 
+             variant="ghost" 
+             size="icon" 
+             onClick={() => setActiveChapter(Math.min(chapters.length - 1, activeChapter + 1))}
+             disabled={activeChapter === chapters.length - 1}
+             data-testid="button-next-chapter"
+           >
              <ChevronRight className="w-5 h-5" />
           </Button>
         </div>
-        <Link href="/assembly">
-          <Button className="bg-secondary hover:bg-secondary/90 text-white font-bold">
+        <Link href={`/assembly/${filmId}`}>
+          <Button className="bg-secondary hover:bg-secondary/90 text-white font-bold" data-testid="button-go-to-assembly">
             Go to Assembly <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </Link>
@@ -139,6 +230,7 @@ export default function VideoGenerator() {
                   className="bg-background/50 border-white/10 focus:border-primary/50 min-h-[120px] text-sm" 
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
+                  data-testid="input-video-prompt"
                 />
               </div>
               
@@ -146,7 +238,7 @@ export default function VideoGenerator() {
                 <div className="space-y-2">
                    <Label className="text-xs uppercase text-muted-foreground font-semibold tracking-wider">Model</Label>
                    <Select value={model} onValueChange={setModel}>
-                      <SelectTrigger className="bg-background/50 border-white/10">
+                      <SelectTrigger className="bg-background/50 border-white/10" data-testid="select-model">
                         <SelectValue placeholder="Select Model" />
                       </SelectTrigger>
                       <SelectContent>
@@ -159,7 +251,7 @@ export default function VideoGenerator() {
                  <div className="space-y-2">
                    <Label className="text-xs uppercase text-muted-foreground font-semibold tracking-wider">Resolution</Label>
                    <Select value={resolution} onValueChange={setResolution}>
-                      <SelectTrigger className="bg-background/50 border-white/10">
+                      <SelectTrigger className="bg-background/50 border-white/10" data-testid="select-resolution">
                         <SelectValue placeholder="Select Res" />
                       </SelectTrigger>
                       <SelectContent>
@@ -192,39 +284,27 @@ export default function VideoGenerator() {
                 className="w-full bg-primary hover:bg-primary/90 text-background font-bold h-12 mt-4 shadow-[0_0_15px_rgba(0,243,255,0.3)]"
                 onClick={handleGenerate}
                 disabled={isGenerating}
+                data-testid="button-generate-video"
               >
                  {isGenerating ? "Generating..." : "Generate Video Clip"}
               </Button>
            </GlassCard>
 
            <GlassCard className="flex-1">
-              <h3 className="text-sm font-bold text-white mb-3">History</h3>
-              <div className="space-y-3">
-                 {[1, 2, 3].map((i) => (
-                   <div key={i} className="flex gap-3 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors group">
-                      <div className="w-16 h-10 bg-black rounded border border-white/10 relative overflow-hidden">
-                        {/* Placeholder image */}
-                         <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-black" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                         <p className="text-xs text-white font-medium truncate">Attempt #{i} - {model}</p>
-                         <p className="text-[10px] text-muted-foreground">10s • {resolution}</p>
-                      </div>
-                   </div>
-                 ))}
-              </div>
+              <h3 className="text-sm font-bold text-white mb-3">Chapter Summary</h3>
+              <p className="text-sm text-gray-400">{chapters[activeChapter]?.summary}</p>
            </GlassCard>
         </div>
 
         {/* Center/Right Panel: Preview */}
         <div className="lg:col-span-2 flex flex-col gap-4 h-full min-h-0">
-          <div className="flex-1 bg-black/50 rounded-xl border border-white/10 relative overflow-hidden group flex items-center justify-center shadow-2xl">
-             {/* Video Player Placeholder */}
+          <div className="flex-1 bg-black/50 rounded-xl border border-white/10 relative overflow-hidden group flex items-center justify-center shadow-2xl" data-testid="video-preview-container">
+             {/* Video Player */}
              {isGenerating ? (
                 <div className="flex flex-col items-center gap-4">
                    <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
                    <div className="text-primary font-mono text-lg">{progress}%</div>
-                   <p className="text-sm text-muted-foreground animate-pulse">Sending request to VideogenAPI...</p>
+                   <p className="text-sm text-muted-foreground animate-pulse">Generating video with AI...</p>
                 </div>
              ) : generatedVideoUrl ? (
                 <video 
@@ -233,11 +313,12 @@ export default function VideoGenerator() {
                   autoPlay 
                   loop 
                   className="w-full h-full object-contain"
+                  data-testid="video-player"
                 />
              ) : (
                 <>
                   <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop')] bg-cover bg-center opacity-50" />
-                  <Button size="icon" className="w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white z-10 transition-transform hover:scale-110">
+                  <Button size="icon" className="w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white z-10 transition-transform hover:scale-110" data-testid="button-play-placeholder">
                      <Play className="w-8 h-8 ml-1" />
                   </Button>
                   
@@ -248,7 +329,6 @@ export default function VideoGenerator() {
                            <Button size="icon" variant="ghost" className="text-white hover:bg-white/10"><Maximize2 className="w-4 h-4" /></Button>
                         </div>
                      </div>
-                     {/* Scrubber */}
                      <div className="w-full h-1 bg-white/20 mt-4 rounded-full overflow-hidden cursor-pointer hover:h-2 transition-all">
                         <div className="w-1/3 h-full bg-primary" />
                      </div>
@@ -259,15 +339,29 @@ export default function VideoGenerator() {
 
           {/* Actions */}
           <div className="h-20 shrink-0 grid grid-cols-3 gap-4">
-             <Button variant="outline" className="h-full border-white/10 hover:bg-white/5 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-white">
+             <Button 
+               variant="outline" 
+               className="h-full border-white/10 hover:bg-white/5 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-white"
+               onClick={handleGenerate}
+               disabled={isGenerating}
+               data-testid="button-regenerate"
+             >
                 <RefreshCw className="w-5 h-5" />
                 <span className="text-xs">Regenerate</span>
              </Button>
-             <Button variant="outline" className="h-full border-white/10 hover:bg-white/5 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-white">
+             <Button 
+               variant="outline" 
+               className="h-full border-white/10 hover:bg-white/5 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-white"
+               data-testid="button-adjust-params"
+             >
                 <Settings2 className="w-5 h-5" />
                 <span className="text-xs">Adjust Params</span>
              </Button>
-             <Button className="h-full bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/20 flex flex-col items-center justify-center gap-2">
+             <Button 
+               className="h-full bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/20 flex flex-col items-center justify-center gap-2"
+               disabled={!generatedVideoUrl}
+               data-testid="button-save-clip"
+             >
                 <Download className="w-5 h-5" />
                 <span className="text-xs">Save Clip</span>
              </Button>

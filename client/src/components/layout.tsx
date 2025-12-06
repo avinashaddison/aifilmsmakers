@@ -2,11 +2,6 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
   PlusCircle, 
-  BookOpen, 
-  Clapperboard, 
-  Video, 
-  Layers, 
-  Download, 
   Settings,
   Film
 } from "lucide-react";
@@ -19,11 +14,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
     { icon: PlusCircle, label: "Create Film", href: "/create" },
-    { icon: BookOpen, label: "Story Framework", href: "/framework" },
-    { icon: Clapperboard, label: "Chapters", href: "/chapters" },
-    { icon: Video, label: "Video Generator", href: "/generator" },
-    { icon: Layers, label: "Film Assembly", href: "/assembly" },
-    { icon: Download, label: "Downloads", href: "/download" },
   ];
 
   return (

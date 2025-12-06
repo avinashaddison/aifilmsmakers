@@ -1,0 +1,291 @@
+FILM MAKING AI – PROJECT SUMMARY (FULL UI + SYSTEM PROMPT)
+What It Does
+
+A web application that generates cinematic films from a single title input.
+The system automatically:
+
+Creates a Story Framework (Premise, Hook, Genre, Tone, Characters)
+
+Generates Chapters (10–20 sections)
+
+Allows users to convert each chapter into AI cinematic video using VideogenAPI
+
+Merges chapters into a full film sequence
+
+Lets users download the entire film
+
+⭐ Three Film Creation Modes
+Mode	Description	Output
+Cinematic Film Mode	Full movie-like storyline with chapters	Video
+Short Film Mode	5-part compact narrative	Video
+Storyboard Mode	Shot-by-shot storyboard frames + prompts	Images
+🎯 Key Requirements (CRITICAL)
+Story Framework Quality
+
+Generated framework must include:
+
+1. Premise
+
+4–6 sentences (never generic)
+
+Named characters with:
+
+Age
+
+Occupation
+
+Backstory & motivation
+
+Exact setting details:
+
+Location
+
+Time
+
+Weather
+
+Visual atmosphere
+
+Impossible situation or cinematic conflict
+
+Emotional stakes
+
+2. Hook
+
+A single powerful cinematic line such as:
+
+“Some memories return only when the camera starts rolling again.”
+
+“Every film begins with a lie, and ends with a truth.”
+
+Tone: reflective, cinematic, mysterious.
+
+3. Genre
+
+User-selectable + AI-suggested:
+
+Horror
+
+Sci-Fi
+
+Romance
+
+Thriller
+
+Bollywood
+
+Action
+
+Drama
+
+4. Characters
+
+Generated with:
+
+Name, age
+
+Personality traits
+
+Strengths/weaknesses
+
+Hidden secrets
+
+Appearance description
+
+Actor-style reference
+
+⚡ Technical Pipeline
+User Inputs Title
+      ↓
+Generate Story Framework (Claude)
+      ↓
+Generate 12–20 Chapters (continuity)
+      ↓
+Each Chapter → VideogenAPI prompt builder
+      ↓
+User selects style, camera, mood
+      ↓
+Generate Video Clips
+      ↓
+FFmpeg Merge (final film)
+      ↓
+Upload to Object Storage
+      ↓
+Final Download Link
+
+🛡 Bulletproof Systems
+1. Video Generation Never Fails
+
+VideogenAPI
+
+Auto-retry (3 attempts)
+
+Detect 401, 429, 500 errors
+
+Smart backoff
+
+2. Storage Never Corrupts
+
+Upload verification
+
+5 retries
+
+Auto cleanup
+
+Persist film even on restart
+
+3. Continuity Across Chapters
+
+Each chapter uses last 10,000 characters as context
+
+Ensures stable story arc
+
+Consistent tone and character behavior
+
+🎨 UI REQUIREMENTS
+Vertical Sidebar (Left)
+
+Cinematic glass-style sidebar with icons:
+
+Dashboard
+
+Create Film
+
+Story Framework
+
+Chapters
+
+Video Generator
+
+Assets Library
+
+Downloads
+
+Settings
+
+Dark mode + neon glow accents (blue/purple).
+
+🖥 Main UI Pages
+PAGE 1 — Title Input + Generate Framework
+
+Large cinematic title box
+
+Button: “Generate Story Framework”
+
+Claude output appears in cards:
+
+Premise
+
+Hook
+
+Genre
+
+Characters
+
+Tone
+
+Setting
+
+At bottom:
+🎬 Start Making Film
+
+PAGE 2 — Chapter Generator
+
+Auto generate 12–20 chapters:
+
+Each chapter card shows:
+
+Chapter title
+
+Summary
+
+Key beats
+
+Emotional arc
+
+Camera/style suggestions
+
+Buttons per chapter:
+🎥 Generate Video
+📝 Edit Prompt
+🔎 Preview
+
+PAGE 3 — VideogenAPI UI
+
+Chapter video generation panel includes:
+
+Inputs
+
+Prompt text (auto-filled but editable)
+
+Video style dropdown
+
+Camera movement selector
+
+Lighting options
+
+Duration
+
+Buttons
+
+Generate
+
+Regenerate
+
+Save Clip
+
+Output:
+High-quality cinematic preview player.
+
+PAGE 4 — Film Assembly (Timeline View)
+
+A drag-and-drop timeline
+
+All generated clips shown as thumbnails
+
+Button: Render Full Film
+
+FFmpeg merges clips → film.
+
+PAGE 5 — Final Download
+
+Film title
+
+Duration
+
+Resolution
+
+Download MP4
+
+Cloud link
+
+🧩 UI Design Style
+
+Dark, cinematic color palette (#0A0F1F)
+
+Neon gradients (blue/purple)
+
+Glassmorphism components
+
+Modern rounded cards
+
+Smooth transitions
+
+Film reel loaders
+
+Typography:
+
+Orbitron / Poppins Bold (headings)
+
+Inter / SF Pro (body)
+
+📦 Deliverables Expected From the UI Generator
+
+✔ Full responsive layout (desktop + mobile)
+✔ Sidebar + Navbar
+✔ Story Framework screen
+✔ Chapter generator screen
+✔ VideogenAPI panel
+✔ Timeline + Renderer screen
+✔ Download page
+✔ Complete component library

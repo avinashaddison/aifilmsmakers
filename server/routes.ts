@@ -282,6 +282,55 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/text-to-video", async (req, res) => {
+    try {
+      const { prompt, duration = 10, resolution = "720p" } = req.body;
+
+      if (!prompt || typeof prompt !== "string") {
+        res.status(400).json({ error: "Prompt is required" });
+        return;
+      }
+
+      const apiKey = process.env.VIDEOGEN_API_KEY;
+      if (!apiKey) {
+        throw new Error("VIDEOGEN_API_KEY not configured");
+      }
+
+      const response = await fetch("https://videogenapi.com/api/v1/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "seedance",
+          prompt,
+          duration: parseInt(duration),
+          resolution
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("VideogenAPI error:", errorText);
+        res.status(500).json({ error: "Video generation failed", details: errorText });
+        return;
+      }
+
+      const result = await response.json();
+      
+      res.json({
+        id: result.id || result.video_id,
+        status: result.status || "processing",
+        videoUrl: result.video_url || result.url,
+        message: result.message || "Video generation started"
+      });
+    } catch (error) {
+      console.error("Text-to-video error:", error);
+      res.status(500).json({ error: "Failed to generate video" });
+    }
+  });
+
   app.post("/api/chapters/:id/generate-video", async (req, res) => {
     try {
       const chapter = await storage.getChapter(req.params.id);

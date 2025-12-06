@@ -11,6 +11,7 @@ import Chapters from "@/pages/chapters";
 import VideoGenerator from "@/pages/generator";
 import Assembly from "@/pages/assembly";
 import DownloadPage from "@/pages/download";
+import TextToVideo from "@/pages/text-to-video";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/create" component={CreateFilm} />
+        <Route path="/text-to-video" component={TextToVideo} />
         <Route path="/framework/:filmId" component={StoryFramework} />
         <Route path="/chapters/:filmId" component={Chapters} />
         <Route path="/generator/:filmId" component={VideoGenerator} />

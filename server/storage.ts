@@ -3,12 +3,15 @@ import {
   films, 
   storyFrameworks, 
   chapters,
+  generatedVideos,
   type InsertFilm, 
   type Film,
   type InsertStoryFramework,
   type StoryFramework,
   type InsertChapter,
-  type Chapter
+  type Chapter,
+  type InsertGeneratedVideo,
+  type GeneratedVideo
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -28,6 +31,12 @@ export interface IStorage {
   getChaptersByFilmId(filmId: string): Promise<Chapter[]>;
   getChapter(id: string): Promise<Chapter | undefined>;
   updateChapter(id: string, updates: Partial<InsertChapter>): Promise<Chapter | undefined>;
+  
+  // Generated Videos
+  createGeneratedVideo(video: InsertGeneratedVideo): Promise<GeneratedVideo>;
+  getGeneratedVideo(id: string): Promise<GeneratedVideo | undefined>;
+  listGeneratedVideos(): Promise<GeneratedVideo[]>;
+  updateGeneratedVideo(id: string, updates: Partial<InsertGeneratedVideo>): Promise<GeneratedVideo | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -95,6 +104,30 @@ export class DbStorage implements IStorage {
       .where(eq(chapters.id, id))
       .returning();
     return chapter;
+  }
+
+  // Generated Videos
+  async createGeneratedVideo(insertVideo: InsertGeneratedVideo): Promise<GeneratedVideo> {
+    const [video] = await db.insert(generatedVideos).values(insertVideo).returning();
+    return video;
+  }
+
+  async getGeneratedVideo(id: string): Promise<GeneratedVideo | undefined> {
+    const [video] = await db.select().from(generatedVideos).where(eq(generatedVideos.id, id));
+    return video;
+  }
+
+  async listGeneratedVideos(): Promise<GeneratedVideo[]> {
+    return await db.select().from(generatedVideos).orderBy(desc(generatedVideos.createdAt));
+  }
+
+  async updateGeneratedVideo(id: string, updates: Partial<InsertGeneratedVideo>): Promise<GeneratedVideo | undefined> {
+    const [video] = await db
+      .update(generatedVideos)
+      .set(updates)
+      .where(eq(generatedVideos.id, id))
+      .returning();
+    return video;
   }
 }
 

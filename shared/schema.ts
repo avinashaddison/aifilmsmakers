@@ -71,3 +71,23 @@ export const insertChapterSchema = createInsertSchema(chapters).omit({
 });
 export type InsertChapter = z.infer<typeof insertChapterSchema>;
 export type Chapter = typeof chapters.$inferSelect;
+
+// Generated Videos table (for Video Library)
+export const generatedVideos = pgTable("generated_videos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  prompt: text("prompt").notNull(),
+  videoUrl: text("video_url"),
+  status: text("status").notNull().default("processing"), // processing, completed, failed
+  duration: integer("duration").notNull().default(10),
+  resolution: text("resolution").notNull().default("1080p"),
+  model: text("model").notNull().default("sora-2"),
+  externalId: text("external_id"), // ID from VideogenAPI
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertGeneratedVideoSchema = createInsertSchema(generatedVideos).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertGeneratedVideo = z.infer<typeof insertGeneratedVideoSchema>;
+export type GeneratedVideo = typeof generatedVideos.$inferSelect;

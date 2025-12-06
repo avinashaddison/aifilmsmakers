@@ -3,6 +3,7 @@ import {
   LayoutDashboard, 
   PlusCircle, 
   Video,
+  Library,
   Settings,
   Film
 } from "lucide-react";
@@ -16,6 +17,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
     { icon: PlusCircle, label: "Create Film", href: "/create" },
     { icon: Video, label: "Text to Video", href: "/text-to-video" },
+    { icon: Library, label: "Video Library", href: "/video-library" },
   ];
 
   return (

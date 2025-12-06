@@ -12,6 +12,7 @@ import VideoGenerator from "@/pages/generator";
 import Assembly from "@/pages/assembly";
 import DownloadPage from "@/pages/download";
 import TextToVideo from "@/pages/text-to-video";
+import VideoLibrary from "@/pages/video-library";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/create" component={CreateFilm} />
         <Route path="/text-to-video" component={TextToVideo} />
+        <Route path="/video-library" component={VideoLibrary} />
         <Route path="/framework/:filmId" component={StoryFramework} />
         <Route path="/chapters/:filmId" component={Chapters} />
         <Route path="/generator/:filmId" component={VideoGenerator} />

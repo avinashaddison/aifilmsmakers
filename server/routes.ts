@@ -284,7 +284,7 @@ export async function registerRoutes(
 
   app.post("/api/text-to-video", async (req, res) => {
     try {
-      const { prompt, duration = 10, resolution = "720p" } = req.body;
+      const { prompt, duration = 10, resolution = "1080p" } = req.body;
 
       if (!prompt || typeof prompt !== "string") {
         res.status(400).json({ error: "Prompt is required" });
@@ -295,6 +295,15 @@ export async function registerRoutes(
       if (!apiKey) {
         throw new Error("VIDEOGEN_API_KEY not configured");
       }
+
+      // Create a record in the database first
+      const videoRecord = await storage.createGeneratedVideo({
+        prompt,
+        duration: parseInt(duration),
+        resolution: "1080p",
+        model: "sora-2",
+        status: "processing"
+      });
 
       const response = await fetch("https://videogenapi.com/api/v1/generate", {
         method: "POST",
@@ -313,21 +322,54 @@ export async function registerRoutes(
       if (!response.ok) {
         const errorText = await response.text();
         console.error("VideogenAPI error:", errorText);
+        await storage.updateGeneratedVideo(videoRecord.id, { status: "failed" });
         res.status(500).json({ error: "Video generation failed", details: errorText });
         return;
       }
 
       const result = await response.json();
       
+      // Update the record with the result
+      await storage.updateGeneratedVideo(videoRecord.id, {
+        externalId: result.id || result.video_id,
+        videoUrl: result.video_url || result.url,
+        status: result.video_url || result.url ? "completed" : "processing"
+      });
+      
       res.json({
-        id: result.id || result.video_id,
-        status: result.status || "processing",
+        id: videoRecord.id,
+        externalId: result.id || result.video_id,
+        status: result.video_url || result.url ? "completed" : "processing",
         videoUrl: result.video_url || result.url,
         message: result.message || "Video generation started"
       });
     } catch (error) {
       console.error("Text-to-video error:", error);
       res.status(500).json({ error: "Failed to generate video" });
+    }
+  });
+
+  // Video Library routes
+  app.get("/api/videos", async (req, res) => {
+    try {
+      const videos = await storage.listGeneratedVideos();
+      res.json(videos);
+    } catch (error) {
+      console.error("Error listing videos:", error);
+      res.status(500).json({ error: "Failed to list videos" });
+    }
+  });
+
+  app.get("/api/videos/:id", async (req, res) => {
+    try {
+      const video = await storage.getGeneratedVideo(req.params.id);
+      if (!video) {
+        res.status(404).json({ error: "Video not found" });
+        return;
+      }
+      res.json(video);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get video" });
     }
   });
 

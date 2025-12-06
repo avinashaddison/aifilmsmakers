@@ -1,11 +1,37 @@
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Play, GripVertical, Scissors, Trash2, Download } from "lucide-react";
-import { Link } from "wouter";
-import { mockChapters } from "@/lib/mock-data";
+import { Play, GripVertical, Scissors, Trash2, Download, Loader2 } from "lucide-react";
+import { Link, useRoute } from "wouter";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export default function Assembly() {
+  const [, params] = useRoute("/assembly/:filmId");
+  const filmId = params?.filmId ? parseInt(params.filmId) : null;
+  const [chapters, setChapters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!filmId) return;
+
+    const fetchChapters = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/films/${filmId}/chapters`);
+        if (!response.ok) throw new Error("Failed to fetch chapters");
+        const data = await response.json();
+        setChapters(data);
+      } catch (error) {
+        console.error("Error fetching chapters:", error);
+        toast.error("Failed to load chapters");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChapters();
+  }, [filmId]);
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col animate-in fade-in duration-700">
        <div className="flex items-center justify-between mb-6 shrink-0">
@@ -61,30 +87,41 @@ export default function Assembly() {
             </div>
 
             <div className="flex gap-1 h-full">
-               {mockChapters.map((chapter, i) => (
-                 <div 
-                  key={i} 
-                  className={cn(
-                    "h-full rounded border border-white/10 relative group cursor-move hover:border-primary/50 transition-colors overflow-hidden",
-                    "min-w-[180px] bg-card/50" 
-                  )}
-                 >
-                    {/* Thumbnail Strip (Fake) */}
-                    <div className="absolute inset-0 flex opacity-30">
-                       <div className="flex-1 bg-gray-800" />
-                       <div className="flex-1 bg-gray-700" />
-                       <div className="flex-1 bg-gray-600" />
-                    </div>
-                    
-                    <div className="absolute inset-0 p-2 flex flex-col justify-between">
-                       <div className="flex justify-between items-start">
-                         <span className="text-[10px] font-bold text-white bg-black/50 px-1 rounded backdrop-blur">CH {chapter.id}</span>
-                         <GripVertical className="w-3 h-3 text-white/50" />
-                       </div>
-                       <span className="text-[10px] text-white/70 truncate">{chapter.title}</span>
-                    </div>
+               {loading ? (
+                 <div className="flex items-center justify-center w-full">
+                   <Loader2 className="h-6 w-6 text-primary animate-spin" />
                  </div>
-               ))}
+               ) : chapters.length === 0 ? (
+                 <div className="flex items-center justify-center w-full">
+                   <p className="text-sm text-muted-foreground">No chapters available</p>
+                 </div>
+               ) : (
+                 chapters.map((chapter) => (
+                   <div 
+                    key={chapter.id} 
+                    data-testid={`timeline-chapter-${chapter.id}`}
+                    className={cn(
+                      "h-full rounded border border-white/10 relative group cursor-move hover:border-primary/50 transition-colors overflow-hidden",
+                      "min-w-[180px] bg-card/50" 
+                    )}
+                   >
+                      {/* Thumbnail Strip (Fake) */}
+                      <div className="absolute inset-0 flex opacity-30">
+                         <div className="flex-1 bg-gray-800" />
+                         <div className="flex-1 bg-gray-700" />
+                         <div className="flex-1 bg-gray-600" />
+                      </div>
+                      
+                      <div className="absolute inset-0 p-2 flex flex-col justify-between">
+                         <div className="flex justify-between items-start">
+                           <span className="text-[10px] font-bold text-white bg-black/50 px-1 rounded backdrop-blur">CH {chapter.chapterNumber}</span>
+                           <GripVertical className="w-3 h-3 text-white/50" />
+                         </div>
+                         <span className="text-[10px] text-white/70 truncate">{chapter.title}</span>
+                      </div>
+                   </div>
+                 ))
+               )}
             </div>
          </div>
       </div>

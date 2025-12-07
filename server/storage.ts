@@ -21,6 +21,7 @@ export interface IStorage {
   getFilm(id: string): Promise<Film | undefined>;
   listFilms(): Promise<Film[]>;
   updateFilmStatus(id: string, status: string): Promise<Film | undefined>;
+  updateFilm(id: string, updates: Partial<InsertFilm>): Promise<Film | undefined>;
   
   // Story Frameworks
   createStoryFramework(framework: InsertStoryFramework): Promise<StoryFramework>;
@@ -59,6 +60,15 @@ export class DbStorage implements IStorage {
     const [film] = await db
       .update(films)
       .set({ status })
+      .where(eq(films.id, id))
+      .returning();
+    return film;
+  }
+
+  async updateFilm(id: string, updates: Partial<InsertFilm>): Promise<Film | undefined> {
+    const [film] = await db
+      .update(films)
+      .set(updates)
       .where(eq(films.id, id))
       .returning();
     return film;

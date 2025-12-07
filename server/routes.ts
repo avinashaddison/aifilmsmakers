@@ -136,6 +136,42 @@ Ensure the chapters flow naturally, build tension, and create a complete narrati
   return JSON.parse(jsonMatch[0]);
 }
 
+async function generateScenePrompts(chapterSummary: string, chapterTitle: string, numberOfScenes: number = 3) {
+  const systemPrompt = "You are a professional video director who creates detailed scene prompts for AI video generation. Always respond with valid JSON only, no additional text.";
+  
+  const userPrompt = `Based on the following chapter, create ${numberOfScenes} detailed video scene prompts.
+
+Chapter Title: ${chapterTitle}
+Chapter Summary: ${chapterSummary}
+
+Generate a JSON array of ${numberOfScenes} scene prompts (no markdown, just pure JSON):
+[
+  "Detailed visual description for scene 1 (50-80 words). Include: camera angles, lighting, action, mood, characters visible, environment details. Be specific and cinematic.",
+  "Detailed visual description for scene 2...",
+  "Detailed visual description for scene 3..."
+]
+
+Each prompt should capture a key moment from the chapter and be optimized for AI video generation.`;
+
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("openai/gpt-4o-mini", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+    },
+  })) {
+    fullResponse += event.toString();
+  }
+
+  const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    throw new Error("Could not parse JSON from GPT response");
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express

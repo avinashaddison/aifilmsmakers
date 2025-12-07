@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, ArrowRight, Zap, Film, Mic, Clock, Hash, Video, ArrowLeft, BookOpen } from "lucide-react";
+import { Loader2, Sparkles, Zap, Film, Mic, Clock, Hash, Video, BookOpen, Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { NARRATOR_VOICES, STORY_LENGTHS, VIDEO_MODELS } from "@shared/schema";
+import { NARRATOR_VOICES, STORY_LENGTHS, VIDEO_MODELS, FRAME_SIZES } from "@shared/schema";
 
 interface StoryPreview {
   genres: string[];
@@ -40,31 +40,44 @@ const VIDEO_MODEL_LABELS: Record<string, { label: string; quality: string }> = {
   "runway-gen-3": { label: "Runway Gen-3", quality: "Creative" }
 };
 
+const FRAME_SIZE_LABELS: Record<string, { label: string; resolution: string }> = {
+  "720p": { label: "HD", resolution: "1280x720" },
+  "1080p": { label: "Full HD", resolution: "1920x1080" },
+  "4K": { label: "4K Ultra HD", resolution: "3840x2160" }
+};
+
 export default function CreateFilm() {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [title, setTitle] = useState("");
   const [preview, setPreview] = useState<StoryPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   
   const [narratorVoice, setNarratorVoice] = useState("male-narrator");
   const [storyLength, setStoryLength] = useState("medium");
   const [chapterCount, setChapterCount] = useState(5);
   const [wordsPerChapter, setWordsPerChapter] = useState(500);
   const [videoModel, setVideoModel] = useState("sora-2");
+  const [frameSize, setFrameSize] = useState("1080p");
   
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const handlePreview = async () => {
-    if (!title) return;
-    setIsLoading(true);
+  const fetchPreview = useCallback(async (filmTitle: string) => {
+    if (!filmTitle || filmTitle.length < 3) {
+      setPreview(null);
+      setPreviewError(null);
+      return;
+    }
+    
+    setIsLoadingPreview(true);
+    setPreviewError(null);
     
     try {
       const response = await fetch("/api/preview-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title })
+        body: JSON.stringify({ title: filmTitle })
       });
 
       if (!response.ok) {
@@ -73,22 +86,27 @@ export default function CreateFilm() {
 
       const previewData = await response.json();
       setPreview(previewData);
-      setStep(2);
     } catch (error) {
       console.error("Error generating preview:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate preview"
-      });
-      setStep(1);
+      setPreviewError("Failed to generate preview. Please try again.");
+      setPreview(null);
     } finally {
-      setIsLoading(false);
+      setIsLoadingPreview(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (title.length >= 3) {
+        fetchPreview(title);
+      }
+    }, 800);
+
+    return () => clearTimeout(debounceTimer);
+  }, [title, fetchPreview]);
 
   const handleGenerate = async () => {
-    if (!title || !preview) return;
+    if (!title) return;
     setIsGenerating(true);
     
     try {
@@ -97,12 +115,14 @@ export default function CreateFilm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           title, 
-          status: "draft",
+          status: "generating",
+          generationStage: "generating_chapters",
           narratorVoice,
           storyLength,
           chapterCount,
           wordsPerChapter,
-          videoModel
+          videoModel,
+          frameSize
         })
       });
 
@@ -112,21 +132,12 @@ export default function CreateFilm() {
 
       const film = await filmResponse.json();
 
-      const frameworkResponse = await fetch(`/api/films/${film.id}/framework`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-
-      if (!frameworkResponse.ok) {
-        throw new Error("Failed to generate framework");
-      }
-
       toast({
-        title: "Film Created!",
-        description: "Story framework generated successfully"
+        title: "Film Creation Started!",
+        description: "Generating your cinematic masterpiece..."
       });
 
-      setLocation(`/framework/${film.id}`);
+      setLocation(`/progress/${film.id}`);
     } catch (error) {
       console.error("Error creating film:", error);
       toast({
@@ -154,136 +165,97 @@ export default function CreateFilm() {
     }
   };
 
-  if (step === 1) {
-    return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-8 duration-700">
-        <div className="w-full max-w-3xl text-center space-y-10">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold tracking-widest uppercase mb-4 animate-pulse-slow">
-              <Zap className="w-3 h-3" /> AI Story Engine v2.0
-            </div>
-            <h1 className="font-display text-5xl md:text-7xl font-bold text-white pb-2 text-glow tracking-tight">
-              What is your <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">story?</span>
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-xl mx-auto">
-              Enter a title and let our neural network craft the cinematic universe.
-            </p>
-          </div>
-
-          <div className="animate-float">
-            <GlassCard variant="neo" className="p-8 md:p-10 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50" />
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-secondary/20 blur opacity-20 group-hover:opacity-40 transition-opacity duration-500" />
-              
-              <div className="flex flex-col md:flex-row gap-4 relative z-10">
-                <Input 
-                  placeholder="e.g. Pregnant Single Mom Bought Her Late Mother's Storage Unit" 
-                  className="h-16 text-xl px-6 bg-black/40 border-white/10 focus:border-primary/50 focus:ring-primary/20 focus:shadow-[0_0_20px_rgba(0,243,255,0.2)] transition-all"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handlePreview()}
-                  data-testid="input-film-title"
-                />
-                <Button 
-                  size="lg" 
-                  className="h-16 px-10 text-lg bg-primary hover:bg-primary/90 text-background font-bold shadow-[0_0_20px_rgba(0,243,255,0.3)] hover:shadow-[0_0_40px_rgba(0,243,255,0.5)] transition-all min-w-[200px] tracking-wide"
-                  onClick={handlePreview}
-                  disabled={isLoading || !title}
-                  data-testid="button-preview-story"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Generating...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRight className="mr-2 h-6 w-6" /> Next
-                    </>
-                  )}
-                </Button>
-              </div>
-            </GlassCard>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
-            <span className="font-mono text-xs opacity-50 uppercase tracking-widest pt-1">Suggestions:</span>
-            <button onClick={() => setTitle("The Silent Horizon")} className="hover:text-primary transition-colors hover:scale-105 transform duration-200 border-b border-transparent hover:border-primary/50 pb-0.5">"The Silent Horizon"</button>
-            <span className="opacity-20">•</span>
-            <button onClick={() => setTitle("Cyberpunk 2099")} className="hover:text-secondary transition-colors hover:scale-105 transform duration-200 border-b border-transparent hover:border-secondary/50 pb-0.5">"Cyberpunk 2099"</button>
-            <span className="opacity-20">•</span>
-            <button onClick={() => setTitle("Midnight in Tokyo")} className="hover:text-primary transition-colors hover:scale-105 transform duration-200 border-b border-transparent hover:border-primary/50 pb-0.5">"Midnight in Tokyo"</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen py-8 px-4 animate-in fade-in slide-in-from-right-8 duration-500">
+    <div className="min-h-screen py-8 px-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
       <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            onClick={() => setStep(1)}
-            className="text-muted-foreground hover:text-white"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back
-          </Button>
-          <div className="flex-1" />
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/10 border border-secondary/20 text-secondary text-xs font-bold tracking-widest uppercase">
-            <Film className="w-3 h-3" /> Step 2: Configure
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold tracking-widest uppercase mb-4 animate-pulse-slow">
+            <Zap className="w-3 h-3" /> AI Story Engine v2.0
           </div>
-        </div>
-
-        <div className="text-center space-y-2">
-          <h1 className="font-display text-4xl md:text-5xl font-bold text-white text-glow">
-            {title}
+          <h1 className="font-display text-5xl md:text-6xl font-bold text-white pb-2 text-glow tracking-tight">
+            Create Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Film</span>
           </h1>
-          <p className="text-muted-foreground">Configure your film before generating</p>
+          <p className="text-xl text-muted-foreground max-w-xl mx-auto">
+            Enter a title and configure your cinematic experience
+          </p>
         </div>
 
-        {preview && (
-          <GlassCard variant="neo" className="p-6 md:p-8">
-            <h2 className="font-display text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" /> AI-Generated Preview
-            </h2>
-            
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Genres</Label>
-                <div className="flex flex-wrap gap-2" data-testid="preview-genres">
-                  {preview.genres.map((genre, i) => (
-                    <span 
-                      key={i}
-                      className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-medium"
-                    >
-                      {genre}
-                    </span>
-                  ))}
+        <GlassCard variant="neo" className="p-6 md:p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50" />
+          
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-white flex items-center gap-2">
+                <Film className="w-4 h-4 text-primary" /> Film Title
+              </Label>
+              <Input 
+                placeholder="e.g. Pregnant Single Mom Bought Her Late Mother's Storage Unit" 
+                className="h-14 text-lg px-5 bg-black/40 border-white/10 focus:border-primary/50 focus:ring-primary/20 focus:shadow-[0_0_20px_rgba(0,243,255,0.2)] transition-all"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                data-testid="input-film-title"
+              />
+              {title.length > 0 && title.length < 3 && (
+                <p className="text-xs text-muted-foreground">Enter at least 3 characters to generate preview</p>
+              )}
+            </div>
+
+            {isLoadingPreview && (
+              <div className="flex items-center justify-center py-8 text-primary">
+                <Loader2 className="w-6 h-6 animate-spin mr-3" />
+                <span className="text-sm">Generating AI preview...</span>
+              </div>
+            )}
+
+            {previewError && (
+              <div className="text-center py-4 text-red-400 text-sm">
+                {previewError}
+              </div>
+            )}
+
+            {preview && !isLoadingPreview && (
+              <div className="border-t border-white/10 pt-6">
+                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" /> AI-Generated Preview
+                </h2>
+                
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Genres</Label>
+                    <div className="flex flex-wrap gap-2" data-testid="preview-genres">
+                      {preview.genres.map((genre, i) => (
+                        <span 
+                          key={i}
+                          className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-medium"
+                        >
+                          {genre}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Premise</Label>
+                    <p className="text-white/90 leading-relaxed text-sm" data-testid="preview-premise">
+                      {preview.premise}
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2 md:col-span-3">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Opening Hook</Label>
+                    <p className="text-secondary/90 italic border-l-2 border-secondary/50 pl-4" data-testid="preview-hook">
+                      "{preview.openingHook}"
+                    </p>
+                  </div>
                 </div>
               </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Premise</Label>
-                <p className="text-white/90 leading-relaxed" data-testid="preview-premise">
-                  {preview.premise}
-                </p>
-              </div>
-              
-              <div className="space-y-2 md:col-span-3">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Opening Hook</Label>
-                <p className="text-lg text-secondary/90 italic border-l-2 border-secondary/50 pl-4" data-testid="preview-hook">
-                  "{preview.openingHook}"
-                </p>
-              </div>
-            </div>
-          </GlassCard>
-        )}
+            )}
+          </div>
+        </GlassCard>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <GlassCard className="p-6">
-            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
               <Mic className="w-4 h-4 text-primary" /> Narrator Voice
             </h3>
             <Select value={narratorVoice} onValueChange={setNarratorVoice}>
@@ -300,8 +272,8 @@ export default function CreateFilm() {
             </Select>
           </GlassCard>
 
-          <GlassCard className="p-6">
-            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
               <Video className="w-4 h-4 text-secondary" /> Video Model
             </h3>
             <Select value={videoModel} onValueChange={setVideoModel}>
@@ -321,8 +293,29 @@ export default function CreateFilm() {
             </Select>
           </GlassCard>
 
-          <GlassCard className="p-6">
-            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
+              <Monitor className="w-4 h-4 text-primary" /> Frame Size
+            </h3>
+            <Select value={frameSize} onValueChange={setFrameSize}>
+              <SelectTrigger className="w-full bg-black/40 border-white/10" data-testid="select-frame-size">
+                <SelectValue placeholder="Select resolution" />
+              </SelectTrigger>
+              <SelectContent>
+                {FRAME_SIZES.map((size) => (
+                  <SelectItem key={size} value={size}>
+                    <div className="flex items-center justify-between w-full gap-4">
+                      <span>{FRAME_SIZE_LABELS[size].label}</span>
+                      <span className="text-xs text-muted-foreground">{FRAME_SIZE_LABELS[size].resolution}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </GlassCard>
+
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4 text-primary" /> Story Length
             </h3>
             <Select value={storyLength} onValueChange={handleStoryLengthChange}>
@@ -342,12 +335,12 @@ export default function CreateFilm() {
             </Select>
           </GlassCard>
 
-          <GlassCard className="p-6">
-            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
               <Hash className="w-4 h-4 text-secondary" /> Chapters
-              <span className="ml-auto text-2xl font-bold text-primary">{chapterCount}</span>
+              <span className="ml-auto text-xl font-bold text-primary">{chapterCount}</span>
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <Slider
                 value={[chapterCount]}
                 onValueChange={(value) => {
@@ -361,18 +354,18 @@ export default function CreateFilm() {
                 data-testid="slider-chapter-count"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1 chapter</span>
-                <span>18 chapters</span>
+                <span>1</span>
+                <span>18</span>
               </div>
             </div>
           </GlassCard>
 
-          <GlassCard className="p-6 md:col-span-2">
-            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-primary" /> Words Per Chapter
-              <span className="ml-auto text-2xl font-bold text-secondary">{wordsPerChapter}</span>
+          <GlassCard className="p-5">
+            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" /> Words/Chapter
+              <span className="ml-auto text-xl font-bold text-secondary">{wordsPerChapter}</span>
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <Slider
                 value={[wordsPerChapter]}
                 onValueChange={(value) => setWordsPerChapter(value[0])}
@@ -383,29 +376,35 @@ export default function CreateFilm() {
                 data-testid="slider-words-per-chapter"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>100 words (Brief)</span>
-                <span>500 words (Standard)</span>
-                <span>1000 words (Detailed)</span>
+                <span>100</span>
+                <span>1000</span>
               </div>
             </div>
           </GlassCard>
         </div>
 
-        <div className="flex flex-col items-center gap-4 pt-4">
-          <div className="text-sm text-muted-foreground">
-            Total estimated content: <span className="text-white font-bold">{chapterCount * wordsPerChapter}</span> words across <span className="text-white font-bold">{chapterCount}</span> chapters
+        <GlassCard className="p-4 bg-black/20">
+          <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
+            <div className="text-muted-foreground">
+              <span className="text-white font-bold">{chapterCount}</span> chapters × <span className="text-white font-bold">{wordsPerChapter}</span> words = <span className="text-primary font-bold">{(chapterCount * wordsPerChapter).toLocaleString()}</span> total words
+            </div>
+            <div className="text-muted-foreground">
+              Resolution: <span className="text-secondary font-bold">{FRAME_SIZE_LABELS[frameSize]?.resolution}</span>
+            </div>
           </div>
-          
+        </GlassCard>
+
+        <div className="flex flex-col items-center gap-4 pt-4">
           <Button 
             size="lg" 
             className="h-16 px-12 text-xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-background font-bold shadow-[0_0_30px_rgba(0,243,255,0.4)] hover:shadow-[0_0_50px_rgba(0,243,255,0.6)] transition-all tracking-wide"
             onClick={handleGenerate}
-            disabled={isGenerating}
+            disabled={isGenerating || !title || title.length < 3}
             data-testid="button-generate-film"
           >
             {isGenerating ? (
               <>
-                <Loader2 className="mr-3 h-7 w-7 animate-spin" /> Generating Film...
+                <Loader2 className="mr-3 h-7 w-7 animate-spin" /> Starting Generation...
               </>
             ) : (
               <>
@@ -413,6 +412,10 @@ export default function CreateFilm() {
               </>
             )}
           </Button>
+          
+          <p className="text-xs text-muted-foreground text-center max-w-md">
+            This will generate chapters, create video prompts, generate videos for each scene, and merge them into a complete film.
+          </p>
         </div>
       </div>
     </div>

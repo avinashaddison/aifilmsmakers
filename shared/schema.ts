@@ -28,16 +28,37 @@ export const VIDEO_MODELS = [
   "runway-gen-3"
 ] as const;
 
+export const FRAME_SIZES = [
+  "720p",
+  "1080p",
+  "4K"
+] as const;
+
+export const GENERATION_STAGES = [
+  "idle",
+  "generating_chapters",
+  "generating_prompts",
+  "generating_videos", 
+  "merging_chapters",
+  "merging_final",
+  "completed",
+  "failed"
+] as const;
+
 // Films table
 export const films = pgTable("films", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   status: text("status").notNull().default("draft"), // draft, generating, completed
+  generationStage: text("generation_stage").default("idle"),
   narratorVoice: text("narrator_voice").default("male-narrator"),
   storyLength: text("story_length").default("medium"),
   chapterCount: integer("chapter_count").default(5),
   wordsPerChapter: integer("words_per_chapter").default(500),
   videoModel: text("video_model").default("sora-2"),
+  frameSize: text("frame_size").default("1080p"),
+  finalVideoUrl: text("final_video_url"),
+  finalVideoPath: text("final_video_path"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -47,12 +68,16 @@ export const insertFilmSchema = createInsertSchema(films).omit({ id: true, creat
   chapterCount: z.number().optional(),
   wordsPerChapter: z.number().optional(),
   videoModel: z.string().optional(),
+  frameSize: z.string().optional(),
+  generationStage: z.string().optional(),
 });
 export type InsertFilm = z.infer<typeof insertFilmSchema>;
 export type Film = typeof films.$inferSelect;
 export type NarratorVoice = typeof NARRATOR_VOICES[number];
 export type StoryLength = typeof STORY_LENGTHS[number];
 export type VideoModel = typeof VIDEO_MODELS[number];
+export type FrameSize = typeof FRAME_SIZES[number];
+export type GenerationStage = typeof GENERATION_STAGES[number];
 
 // Story Frameworks table
 export const storyFrameworks = pgTable("story_frameworks", {
@@ -93,8 +118,18 @@ export const chapters = pgTable("chapters", {
   title: text("title").notNull(),
   summary: text("summary").notNull(),
   prompt: text("prompt"), // AI-generated video prompt
-  status: text("status").notNull().default("pending"), // pending, generating, completed, failed
+  scenePrompts: jsonb("scene_prompts").$type<string[]>(), // Array of video prompts for each scene/frame
+  videoFrames: jsonb("video_frames").$type<Array<{
+    frameNumber: number;
+    prompt: string;
+    videoUrl?: string;
+    objectPath?: string;
+    status: string;
+    externalId?: string;
+  }>>(),
+  status: text("status").notNull().default("pending"), // pending, generating_prompts, generating_videos, merging, completed, failed
   videoUrl: text("video_url"),
+  objectPath: text("object_path"), // Path in object storage for merged chapter video
   duration: text("duration").default("00:45"),
   metadata: jsonb("metadata").$type<{
     style?: string;

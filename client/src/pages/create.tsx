@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,6 @@ import { Slider } from "@/components/ui/slider";
 import { Loader2, Sparkles, Zap, Film, Mic, Clock, Hash, Video, BookOpen, Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { NARRATOR_VOICES, STORY_LENGTHS, VIDEO_MODELS, FRAME_SIZES } from "@shared/schema";
-
-interface StoryPreview {
-  genres: string[];
-  premise: string;
-  openingHook: string;
-}
 
 const NARRATOR_VOICE_LABELS: Record<string, string> = {
   "male-narrator": "Male Narrator",
@@ -51,11 +45,8 @@ const FRAME_SIZE_LABELS: Record<string, { label: string; resolution: string }> =
 };
 
 export default function CreateFilm() {
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [title, setTitle] = useState("");
-  const [preview, setPreview] = useState<StoryPreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   
   const [narratorVoice, setNarratorVoice] = useState("male-narrator");
   const [storyLength, setStoryLength] = useState("medium");
@@ -66,48 +57,6 @@ export default function CreateFilm() {
   
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-
-  const fetchPreview = useCallback(async (filmTitle: string) => {
-    if (!filmTitle || filmTitle.length < 3) {
-      setPreview(null);
-      setPreviewError(null);
-      return;
-    }
-    
-    setIsLoadingPreview(true);
-    setPreviewError(null);
-    
-    try {
-      const response = await fetch("/api/preview-story", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: filmTitle })
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to generate preview");
-      }
-
-      const previewData = await response.json();
-      setPreview(previewData);
-    } catch (error) {
-      console.error("Error generating preview:", error);
-      setPreviewError("Failed to generate preview. Please try again.");
-      setPreview(null);
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (title.length >= 3) {
-        fetchPreview(title);
-      }
-    }, 800);
-
-    return () => clearTimeout(debounceTimer);
-  }, [title, fetchPreview]);
 
   const handleGenerate = async () => {
     if (!title) return;
@@ -199,61 +148,7 @@ export default function CreateFilm() {
                 onChange={(e) => setTitle(e.target.value)}
                 data-testid="input-film-title"
               />
-              {title.length > 0 && title.length < 3 && (
-                <p className="text-xs text-muted-foreground">Enter at least 3 characters to generate preview</p>
-              )}
             </div>
-
-            {isLoadingPreview && (
-              <div className="flex items-center justify-center py-8 text-primary">
-                <Loader2 className="w-6 h-6 animate-spin mr-3" />
-                <span className="text-sm">Generating AI preview...</span>
-              </div>
-            )}
-
-            {previewError && (
-              <div className="text-center py-4 text-red-400 text-sm">
-                {previewError}
-              </div>
-            )}
-
-            {preview && !isLoadingPreview && (
-              <div className="border-t border-white/10 pt-6">
-                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" /> AI-Generated Preview
-                </h2>
-                
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Genres</Label>
-                    <div className="flex flex-wrap gap-2" data-testid="preview-genres">
-                      {preview.genres.map((genre, i) => (
-                        <span 
-                          key={i}
-                          className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-medium"
-                        >
-                          {genre}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 md:col-span-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Premise</Label>
-                    <p className="text-white/90 leading-relaxed text-sm" data-testid="preview-premise">
-                      {preview.premise}
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2 md:col-span-3">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Opening Hook</Label>
-                    <p className="text-secondary/90 italic border-l-2 border-secondary/50 pl-4" data-testid="preview-hook">
-                      "{preview.openingHook}"
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </GlassCard>
 

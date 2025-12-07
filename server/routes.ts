@@ -624,12 +624,35 @@ Make it cinematic, compelling, and suitable for video generation.`;
     fullResponse += event.toString();
   }
 
-  const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // Try multiple JSON extraction patterns
+  let jsonStr: string | null = null;
+  
+  // First, try to extract from markdown code blocks
+  const codeBlockMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  }
+  
+  // If no code block, try to find raw JSON object
+  if (!jsonStr) {
+    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+  }
+  
+  if (!jsonStr) {
+    console.error("Failed to parse JSON from response:", fullResponse.substring(0, 500));
     throw new Error("Could not parse JSON from GPT response");
   }
 
-  return JSON.parse(jsonMatch[0]);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (parseError) {
+    console.error("JSON parse error:", parseError);
+    console.error("Attempted to parse:", jsonStr.substring(0, 500));
+    throw new Error(`Failed to parse story framework JSON: ${parseError}`);
+  }
 }
 
 async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5, wordsPerChapter: number = 500) {

@@ -38,7 +38,7 @@ const FRAME_SIZE_LABELS: Record<string, { label: string; resolution: string }> =
 };
 
 interface Framework {
-  genre: string;
+  genres: string[];
   premise: string;
   hook: string;
 }
@@ -73,7 +73,7 @@ export default function CreateFilm() {
       
       const data = await response.json();
       setFramework({
-        genre: data.genre,
+        genres: data.genres || [data.genre],
         premise: data.premise,
         hook: data.hook
       });
@@ -156,23 +156,29 @@ export default function CreateFilm() {
       {framework && (
         <>
           <GlassCard className="p-6">
-            <h2 className="text-xl font-bold mb-4">Story Framework</h2>
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <p className="text-xs text-muted-foreground uppercase mb-1">Title</p>
-                <p className="text-lg font-medium">{title}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Title</p>
+                <h2 className="text-2xl font-bold text-foreground">{title}</h2>
               </div>
+              
               <div>
-                <p className="text-xs text-muted-foreground uppercase mb-1">Genre</p>
-                <p className="text-lg">{framework.genre}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Genres</p>
+                <div className="space-y-1">
+                  {framework.genres.map((genre, index) => (
+                    <p key={index} className="text-foreground">{genre}</p>
+                  ))}
+                </div>
               </div>
+              
               <div>
-                <p className="text-xs text-muted-foreground uppercase mb-1">Premise</p>
-                <p className="text-muted-foreground">{framework.premise}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Premise</p>
+                <p className="text-foreground leading-relaxed">{framework.premise}</p>
               </div>
+              
               <div>
-                <p className="text-xs text-muted-foreground uppercase mb-1">Hook</p>
-                <p className="text-muted-foreground italic">{framework.hook}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Hook</p>
+                <p className="text-foreground leading-relaxed">{framework.hook}</p>
               </div>
             </div>
           </GlassCard>

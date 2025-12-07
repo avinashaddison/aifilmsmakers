@@ -53,28 +53,34 @@ async function generateStoryFramework(filmTitle: string) {
 
 Generate a JSON response with the following structure (no markdown, just pure JSON):
 {
-  "premise": "A 2-3 sentence premise of the film",
-  "hook": "A compelling opening hook (1-2 sentences)",
-  "genre": "The primary genre (e.g., Sci-Fi, Drama, Thriller, etc.)",
+  "genres": ["Primary Genre", "Secondary Genre", "Tertiary Genre"],
+  "premise": "A detailed 4-6 sentence premise that sets up the world, introduces the main character with their backstory, establishes their current situation, and hints at the conflict to come. Be vivid and descriptive, painting a clear picture of the story's foundation.",
+  "hook": "A compelling 3-4 sentence opening hook that draws viewers in immediately. Describe the opening scene, the mood, and what question or mystery will keep the audience watching. Make it cinematic and emotionally engaging.",
   "tone": "The overall tone (e.g., Dark, Uplifting, Mysterious, etc.)",
   "setting": {
-    "location": "Primary location",
+    "location": "Primary location with vivid details",
     "time": "Time period",
-    "weather": "Weather/climate",
-    "atmosphere": "Overall atmosphere"
+    "weather": "Weather/climate that enhances the mood",
+    "atmosphere": "Overall atmosphere and visual style"
   },
   "characters": [
     {
       "name": "Character name",
       "age": 30,
       "role": "protagonist/antagonist/supporting",
-      "description": "Brief character description",
+      "description": "Detailed character description including personality, motivations, and arc",
       "actor": "Suggested actor type or name"
     }
   ]
 }
 
-Make it cinematic, compelling, and suitable for video generation. Include 3-5 main characters.`;
+IMPORTANT: 
+- Include 2-3 genres that best describe the film
+- The premise should be a full detailed paragraph (100-150 words)
+- The hook should be a gripping opening that makes viewers want to watch (80-120 words)
+- Include 3-5 main characters with rich descriptions
+
+Make it cinematic, compelling, and suitable for video generation.`;
 
   let fullResponse = "";
   

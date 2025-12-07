@@ -395,6 +395,21 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.post("/api/generate-framework", async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title || typeof title !== "string") {
+        res.status(400).json({ error: "Title is required" });
+        return;
+      }
+      const framework = await generateStoryFramework(title);
+      res.json(framework);
+    } catch (error) {
+      console.error("Error generating framework:", error);
+      res.status(500).json({ error: "Failed to generate framework" });
+    }
+  });
+
   app.post("/api/films", async (req, res) => {
     try {
       const validatedData = insertFilmSchema.parse(req.body);

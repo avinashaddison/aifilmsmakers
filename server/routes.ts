@@ -663,5 +663,283 @@ export async function registerRoutes(
     }
   });
 
+  // Start full film generation pipeline
+  app.post("/api/films/:id/start-generation", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      // Allow starting if idle, failed, or generating_chapters (newly created films)
+      const allowedStages = ["idle", "failed", "generating_chapters"];
+      if (!allowedStages.includes(film.generationStage || "idle")) {
+        res.status(400).json({ error: "Film generation already in progress" });
+        return;
+      }
+
+      // Start the pipeline in background
+      res.json({ message: "Film generation started", filmId: film.id });
+
+      // Run the pipeline asynchronously
+      runFilmGenerationPipeline(film.id).catch(async (error) => {
+        console.error("Pipeline error:", error);
+        await storage.updateFilm(film.id, { generationStage: "failed" });
+      });
+    } catch (error) {
+      console.error("Start generation error:", error);
+      res.status(500).json({ error: "Failed to start generation" });
+    }
+  });
+
   return httpServer;
+}
+
+// Helper function to poll video generation status
+async function pollVideoStatus(externalId: string, maxAttempts: number = 60): Promise<{ videoUrl?: string; status: string }> {
+  const apiKey = process.env.VIDEOGEN_API_KEY;
+  if (!apiKey) {
+    throw new Error("VIDEOGEN_API_KEY not configured");
+  }
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await fetch(`https://videogenapi.com/api/v1/status/${externalId}`, {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const videoUrl = result.video_url || result.url;
+        
+        if (videoUrl) {
+          return { videoUrl, status: "completed" };
+        }
+        
+        if (result.status === "failed" || result.status === "error") {
+          return { status: "failed" };
+        }
+      }
+    } catch (error) {
+      console.error("Poll error:", error);
+    }
+
+    // Wait 5 seconds before next poll
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
+  return { status: "timeout" };
+}
+
+// Main film generation pipeline
+async function runFilmGenerationPipeline(filmId: string) {
+  console.log(`Starting film generation pipeline for film ${filmId}`);
+  
+  const apiKey = process.env.VIDEOGEN_API_KEY;
+  if (!apiKey) {
+    throw new Error("VIDEOGEN_API_KEY not configured");
+  }
+
+  // Step 1: Update stage to generating_chapters
+  await storage.updateFilm(filmId, { generationStage: "generating_chapters" });
+  
+  const film = await storage.getFilm(filmId);
+  if (!film) throw new Error("Film not found");
+
+  // Step 2: Check if framework exists, if not generate it
+  let framework = await storage.getStoryFrameworkByFilmId(filmId);
+  if (!framework) {
+    console.log("Generating story framework...");
+    const generatedFramework = await generateStoryFramework(film.title);
+    framework = await storage.createStoryFramework({
+      filmId,
+      ...generatedFramework
+    });
+  }
+
+  // Step 3: Check if chapters exist, if not generate them
+  let chapters = await storage.getChaptersByFilmId(filmId);
+  if (chapters.length === 0) {
+    console.log("Generating chapters...");
+    const numberOfChapters = film.chapterCount || 5;
+    const wordsPerChapter = film.wordsPerChapter || 500;
+    const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
+    
+    for (const chapter of generatedChapters) {
+      await storage.createChapter({
+        filmId,
+        chapterNumber: chapter.chapterNumber,
+        title: chapter.title,
+        summary: chapter.summary,
+        prompt: chapter.prompt,
+        status: "pending"
+      });
+    }
+    chapters = await storage.getChaptersByFilmId(filmId);
+  }
+
+  // Step 4: Update stage to generating_prompts
+  await storage.updateFilm(filmId, { generationStage: "generating_prompts" });
+
+  // Step 5: Generate scene prompts for each chapter
+  for (const chapter of chapters) {
+    if (!chapter.scenePrompts || chapter.scenePrompts.length === 0) {
+      console.log(`Generating scene prompts for chapter ${chapter.chapterNumber}...`);
+      await storage.updateChapter(chapter.id, { status: "generating_prompts" });
+      
+      const scenePrompts = await generateScenePrompts(chapter.summary, chapter.title, 3);
+      
+      // Create videoFrames array with pending status
+      const videoFrames = scenePrompts.map((prompt: string, index: number) => ({
+        frameNumber: index + 1,
+        prompt,
+        status: "pending"
+      }));
+
+      await storage.updateChapter(chapter.id, { 
+        scenePrompts,
+        videoFrames,
+        status: "generating_videos"
+      });
+    }
+  }
+
+  // Refresh chapters after prompt generation
+  chapters = await storage.getChaptersByFilmId(filmId);
+
+  // Step 6: Update stage to generating_videos
+  await storage.updateFilm(filmId, { generationStage: "generating_videos" });
+
+  // Step 7: Generate videos for each scene prompt
+  for (const chapter of chapters) {
+    if (chapter.status === "completed" || chapter.status === "merging") {
+      continue; // Skip already completed chapters
+    }
+
+    const videoFrames = chapter.videoFrames || [];
+    let updatedFrames = [...videoFrames];
+    let allCompleted = true;
+
+    for (let i = 0; i < updatedFrames.length; i++) {
+      const frame = updatedFrames[i];
+      
+      if (frame.status === "completed" && frame.videoUrl) {
+        continue; // Skip already completed frames
+      }
+
+      console.log(`Generating video for chapter ${chapter.chapterNumber}, frame ${frame.frameNumber}...`);
+      
+      try {
+        // Start video generation
+        const response = await fetch("https://videogenapi.com/api/v1/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: film.videoModel || "sora-2",
+            prompt: frame.prompt,
+            duration: 10,
+            resolution: film.frameSize || "1080p",
+            aspect_ratio: "16:9"
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Video generation failed for frame ${frame.frameNumber}:`, errorText);
+          updatedFrames[i] = { ...frame, status: "failed" };
+          allCompleted = false;
+          continue;
+        }
+
+        const result = await response.json();
+        const externalId = result.id || result.video_id || result.generation_id;
+
+        // Check if video URL is immediately available
+        let videoUrl = result.video_url || result.url;
+
+        if (!videoUrl && externalId) {
+          // Poll for completion
+          updatedFrames[i] = { ...frame, status: "processing", externalId };
+          await storage.updateChapter(chapter.id, { videoFrames: updatedFrames });
+
+          const pollResult = await pollVideoStatus(externalId);
+          if (pollResult.videoUrl) {
+            videoUrl = pollResult.videoUrl;
+          } else {
+            console.error(`Video generation timeout for frame ${frame.frameNumber}`);
+            updatedFrames[i] = { ...frame, status: "failed", externalId };
+            allCompleted = false;
+            continue;
+          }
+        }
+
+        // Upload to object storage
+        try {
+          const objectStorageService = new ObjectStorageService();
+          const objectPath = await objectStorageService.uploadVideoFromUrl(videoUrl);
+          updatedFrames[i] = { 
+            ...frame, 
+            status: "completed", 
+            videoUrl, 
+            objectPath,
+            externalId 
+          };
+        } catch (uploadError) {
+          console.error("Failed to upload to object storage:", uploadError);
+          updatedFrames[i] = { 
+            ...frame, 
+            status: "completed", 
+            videoUrl,
+            externalId 
+          };
+        }
+
+        // Update chapter with progress
+        await storage.updateChapter(chapter.id, { videoFrames: updatedFrames });
+
+      } catch (error) {
+        console.error(`Error generating video for frame ${frame.frameNumber}:`, error);
+        updatedFrames[i] = { ...frame, status: "failed" };
+        allCompleted = false;
+      }
+    }
+
+    // Update chapter status
+    if (allCompleted) {
+      await storage.updateChapter(chapter.id, { 
+        videoFrames: updatedFrames,
+        status: "merging"
+      });
+    } else {
+      await storage.updateChapter(chapter.id, { 
+        videoFrames: updatedFrames,
+        status: "failed"
+      });
+    }
+  }
+
+  // Step 8: Update stage to merging_chapters (placeholder for now)
+  await storage.updateFilm(filmId, { generationStage: "merging_chapters" });
+  
+  // Mark all chapters as completed for now (merging will be implemented later)
+  chapters = await storage.getChaptersByFilmId(filmId);
+  for (const chapter of chapters) {
+    if (chapter.status === "merging") {
+      await storage.updateChapter(chapter.id, { status: "completed" });
+    }
+  }
+
+  // Step 9: Update stage to merging_final
+  await storage.updateFilm(filmId, { generationStage: "merging_final" });
+
+  // Step 10: Mark as completed
+  await storage.updateFilm(filmId, { generationStage: "completed" });
+  
+  console.log(`Film generation pipeline completed for film ${filmId}`);
 }

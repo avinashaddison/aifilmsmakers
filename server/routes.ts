@@ -13,6 +13,378 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
+// Hollywood Screenplay 18-Chapter Structure Configuration
+const HOLLYWOOD_CHAPTER_CONFIG: Record<string, {
+  title: string;
+  wordCount: number;
+  phase: string;
+  description: string;
+  requirements: string;
+}> = {
+  hook: {
+    title: "The Hook",
+    wordCount: 150,
+    phase: "Opening",
+    description: "A glimpse of the ending without context or explanation",
+    requirements: `Write ONLY 150 words. This is a flash-forward scene showing a powerful moment from the climax.
+- Show the protagonist at their most vulnerable or powerful moment
+- Include a symbolic artifact that will gain meaning later
+- Create mystery - the reader should not understand WHY this is happening
+- Use present tense, visceral sensory details
+- End mid-action, leaving the reader desperate to understand`
+  },
+  intro_1: {
+    title: "Before the Fall",
+    wordCount: 850,
+    phase: "Act 1 - World Building",
+    description: "Introduction to the protagonist's ordinary world",
+    requirements: `Write 800-900 words. Establish the protagonist's world BEFORE everything changes.
+- Introduce the protagonist through action, not description
+- Show their daily routines, environment, relationships
+- Hint at their internal flaw or wound without stating it directly
+- Introduce the artifact in its ordinary context
+- Create sensory-rich descriptions of their world
+- Plant seeds of what they're about to lose`
+  },
+  intro_2: {
+    title: "Quiet Routines & Hidden Cracks",
+    wordCount: 850,
+    phase: "Act 1 - World Building",
+    description: "Deeper exploration of relationships and subtle flaws",
+    requirements: `Write 800-900 words. Deepen the world while revealing hidden tensions.
+- Show the protagonist's key relationships in action
+- Reveal their character flaw through behavior, not exposition
+- Include moments of irony (what they don't know is coming)
+- The artifact appears again in a meaningful context
+- Small moments of foreshadowing
+- Build reader investment in this world before it shatters`
+  },
+  intro_3: {
+    title: "The Life They Thought They Had",
+    wordCount: 850,
+    phase: "Act 1 - World Building",
+    description: "The final moments of normalcy before disruption",
+    requirements: `Write 800-900 words. This is the last moment of peace.
+- Create a sense of false security and contentment
+- Show the protagonist making plans or assumptions about the future
+- Include a pivotal relationship moment
+- The artifact appears in a way that seems insignificant
+- Build dramatic irony - readers should feel dread
+- End with subtle warning signs that something is about to change`
+  },
+  inciting_incident: {
+    title: "The First Disturbance",
+    wordCount: 850,
+    phase: "Act 1 - Inciting Incident",
+    description: "The event that disrupts the protagonist's world",
+    requirements: `Write 800-900 words. This is the moment everything changes.
+- Create a clear, specific disrupting event
+- Show the protagonist's immediate visceral reaction
+- The event should feel both surprising and inevitable
+- The artifact gains new significance or appears in a new context
+- Other characters should react, showing the ripple effects
+- End with the protagonist in uncertainty - their old world is gone`
+  },
+  early_dev_1: {
+    title: "Shockwaves",
+    wordCount: 850,
+    phase: "Act 2 - Rising Action",
+    description: "The immediate aftermath and spreading effects of the disruption",
+    requirements: `Write 800-900 words. Show how the disruption spreads through the protagonist's life.
+- Multiple areas of life begin to be affected
+- The protagonist tries to process what happened
+- Relationships begin to shift or strain
+- New conflicts emerge from the initial incident
+- The artifact becomes a point of emotional focus
+- Build a sense of mounting pressure`
+  },
+  early_dev_2: {
+    title: "Attempts to Restore Control",
+    wordCount: 850,
+    phase: "Act 2 - Rising Action",
+    description: "The protagonist's first attempts to fix things (which fail)",
+    requirements: `Write 800-900 words. Show the protagonist's doomed attempts to restore normalcy.
+- They try logical, reasonable solutions that don't work
+- Their character flaw begins to sabotage their efforts
+- Secondary characters may offer help or hindrance
+- The artifact serves as a reminder of what was lost
+- Each attempt should fail in a way that raises stakes
+- Build frustration and desperation`
+  },
+  early_dev_3: {
+    title: "Complications & Subplots",
+    wordCount: 850,
+    phase: "Act 2 - Rising Action",
+    description: "New problems emerge, secondary characters take focus",
+    requirements: `Write 800-900 words. Expand the story's scope with complications.
+- Introduce or deepen secondary storylines
+- New obstacles emerge that weren't anticipated
+- A secondary character faces their own crisis
+- The artifact appears in connection with another character
+- Create moments of dark humor or brief respite
+- Weave together multiple threads of tension`
+  },
+  middle_dev_1: {
+    title: "The Deepening Storm",
+    wordCount: 850,
+    phase: "Act 2 - Midpoint",
+    description: "Escalation of conflicts, raising stakes significantly",
+    requirements: `Write 800-900 words. Intensify every conflict dramatically.
+- Stakes become personal and immediate
+- The protagonist makes a crucial decision or discovery
+- A major relationship is tested or damaged
+- The artifact reveals hidden meaning or history
+- Create a sense that there's no going back
+- Build toward a point of no return`
+  },
+  middle_dev_2: {
+    title: "Truths Rising from the Past",
+    wordCount: 850,
+    phase: "Act 2 - Midpoint",
+    description: "Revelations about characters' histories and hidden truths",
+    requirements: `Write 800-900 words. Uncover secrets and hidden histories.
+- A significant truth about the past is revealed
+- This revelation reframes earlier events
+- Characters must confront uncomfortable truths
+- The artifact is connected to this revelation
+- Relationships shift based on new understanding
+- Create emotional complexity - truth is liberating but painful`
+  },
+  middle_dev_3: {
+    title: "The Breaking Point",
+    wordCount: 850,
+    phase: "Act 2 - Midpoint",
+    description: "The protagonist's emotional and psychological collapse",
+    requirements: `Write 800-900 words. Show the protagonist at their lowest.
+- Their usual coping mechanisms fail completely
+- A moment of complete vulnerability or breakdown
+- They may lash out or retreat from others
+- The artifact becomes a focal point of their pain
+- This is their "dark night of the soul"
+- End with them seemingly defeated, but a spark of change`
+  },
+  plot_twist: {
+    title: "The Plot Twist",
+    wordCount: 1500,
+    phase: "Act 2 - Major Revelation",
+    description: "A major revelation that changes everything the reader thought they knew",
+    requirements: `Write 1400-1500 words. This is the story's major turning point.
+- Reveal a truth that reframes the entire narrative
+- This revelation should be surprising but inevitable in hindsight
+- Plant payoffs for earlier foreshadowing
+- The artifact's true significance is revealed
+- Multiple characters are affected by this truth
+- Create a moment of profound realization
+- Show immediate emotional fallout
+- This chapter should feel like the story breaking open
+- End with the protagonist fundamentally changed by this knowledge`
+  },
+  climax_build_1: {
+    title: "Aftermath of the Truth",
+    wordCount: 850,
+    phase: "Act 3 - Rising to Climax",
+    description: "Processing the revelation and its implications",
+    requirements: `Write 800-900 words. Show characters absorbing the truth.
+- The protagonist processes what they've learned
+- Relationships reconfigure around the new reality
+- Some characters reject the truth, others embrace it
+- The artifact takes on new meaning post-revelation
+- Begin to see the path forward, however difficult
+- Plant seeds for the final confrontation`
+  },
+  climax_build_2: {
+    title: "Final Preparations",
+    wordCount: 850,
+    phase: "Act 3 - Rising to Climax",
+    description: "Gathering strength and resources for the final confrontation",
+    requirements: `Write 800-900 words. The protagonist prepares for what must be done.
+- Concrete preparations for a final action or confrontation
+- Moments of reconnection with key allies
+- The protagonist accepts what they must sacrifice
+- The artifact is prepared or positioned for its final role
+- Quiet moments of resolution before the storm
+- Build anticipation for the climax`
+  },
+  climax_build_3: {
+    title: "Walking into the Storm",
+    wordCount: 850,
+    phase: "Act 3 - Rising to Climax",
+    description: "The march toward the final confrontation",
+    requirements: `Write 800-900 words. The protagonist moves toward their destiny.
+- Physical and emotional journey toward the climax
+- Moments of doubt and determination
+- Final words with key characters
+- The artifact accompanies them on this journey
+- Build tension and inevitability
+- End poised on the edge of the final scene`
+  },
+  climax: {
+    title: "The Climax",
+    wordCount: 1100,
+    phase: "Act 3 - Climax",
+    description: "The final confrontation - return to the scene from the Hook",
+    requirements: `Write 1000-1200 words. Return to the Hook scene with full context.
+- Recreate the opening scene, but now the reader understands everything
+- The protagonist faces their greatest challenge
+- Their character flaw is either overcome or defines their failure
+- The artifact plays its crucial final role
+- Maximum emotional intensity
+- All storylines converge in this moment
+- The outcome should feel both surprising and inevitable`
+  },
+  resolution_1: {
+    title: "The Dust Settles",
+    wordCount: 850,
+    phase: "Resolution",
+    description: "Immediate aftermath of the climax",
+    requirements: `Write 800-900 words. Show the immediate aftermath.
+- The dust literally and metaphorically settles
+- Surviving characters process what happened
+- Consequences of the climax become clear
+- The artifact's final state reflects the story's outcome
+- Moments of grief, relief, or bittersweet victory
+- Begin to show the new normal emerging`
+  },
+  resolution_2: {
+    title: "The Final Reflection",
+    wordCount: 650,
+    phase: "Resolution",
+    description: "Poetic closing that echoes the beginning",
+    requirements: `Write 600-700 words. A quiet, reflective ending.
+- Mirror imagery or scenes from the opening chapters
+- Show how the protagonist has changed
+- The artifact in its final resting place or context
+- Leave some questions for the reader to ponder
+- End on an image or moment that encapsulates the journey
+- Create a sense of completion but not perfect closure`
+  }
+};
+
+// Hollywood screenplay base writing style requirements
+const HOLLYWOOD_STYLE_REQUIREMENTS = `
+WRITING STYLE REQUIREMENTS:
+- Write in third-person limited perspective
+- Use mature, literary prose - no slang or modern jargon
+- Create slow-burn, atmospheric tension
+- Use "." for pauses, never use "..."
+- Include rich sensory details: sight, sound, smell, touch, taste
+- Show emotions through physical sensations and actions
+- Dialogue should feel natural but purposeful
+- Every scene should advance character or plot
+- Maintain consistent tone throughout`;
+
+async function generateHollywoodChapter(
+  filmTitle: string,
+  framework: any,
+  chapterNumber: number,
+  chapterType: string,
+  previousChapters: Array<{title: string; summary: string; chapterType: string; artifact?: any}>,
+  hookContent?: string
+): Promise<{
+  chapterNumber: number;
+  chapterType: string;
+  title: string;
+  summary: string;
+  prompt: string;
+  artifact: { name: string; description: string; significance: string };
+}> {
+  const config = HOLLYWOOD_CHAPTER_CONFIG[chapterType];
+  if (!config) {
+    throw new Error(`Unknown chapter type: ${chapterType}`);
+  }
+
+  const systemPrompt = `You are an award-winning screenwriter crafting a Hollywood-quality screenplay. You write with the depth of literary fiction and the pacing of cinema. Always respond with valid JSON only, no additional text or markdown.`;
+
+  const previousContext = previousChapters.length > 0
+    ? `\n\nPREVIOUS CHAPTERS FOR CONTINUITY:\n${previousChapters.map((c, i) => 
+        `Chapter ${i + 1} (${c.chapterType}): "${c.title}"\nArtifact: ${c.artifact?.name || 'N/A'}\nSummary excerpt: ${c.summary.substring(0, 300)}...`
+      ).join('\n\n')}`
+    : '';
+
+  const hookReference = hookContent && chapterType === 'climax'
+    ? `\n\nHOOK SCENE TO RECREATE WITH FULL CONTEXT:\n${hookContent}\n\nThis climax must return to this scene. The reader now understands what led here.`
+    : '';
+
+  const artifactGuidance = chapterNumber === 1
+    ? 'Create a meaningful symbolic artifact that will recur throughout the story. It should be a physical object with emotional resonance.'
+    : 'Reference the recurring artifact established in earlier chapters. Show its evolving significance.';
+
+  const userPrompt = `Create ${config.title} (Chapter ${chapterNumber} of 18) for a Hollywood screenplay.
+
+FILM DETAILS:
+Title: "${filmTitle}"
+Premise: ${framework.premise}
+Genres: ${Array.isArray(framework.genres) ? framework.genres.join(', ') : framework.genre}
+Tone: ${framework.tone}
+Setting: ${JSON.stringify(framework.setting)}
+Characters: ${framework.characters.map((c: any) => `${c.name} (${c.role}): ${c.description}`).join('\n')}
+${previousContext}
+${hookReference}
+
+CHAPTER REQUIREMENTS:
+Phase: ${config.phase}
+Purpose: ${config.description}
+Target Word Count: ${config.wordCount} words
+
+SPECIFIC INSTRUCTIONS:
+${config.requirements}
+
+ARTIFACT GUIDANCE:
+${artifactGuidance}
+
+${HOLLYWOOD_STYLE_REQUIREMENTS}
+
+Generate a JSON response with this exact structure:
+{
+  "chapterNumber": ${chapterNumber},
+  "chapterType": "${chapterType}",
+  "title": "A compelling, evocative chapter title (3-6 words)",
+  "summary": "The full chapter narrative of exactly ${config.wordCount} words. Write the complete scene with dialogue, action, description, and emotional depth.",
+  "prompt": "A detailed visual prompt for AI video generation (80-120 words). Include: specific camera movements, lighting mood, character positions, key actions, environment details, color palette, and emotional atmosphere.",
+  "artifact": {
+    "name": "The artifact's name",
+    "description": "Physical description of the artifact",
+    "significance": "What it symbolizes or represents in this chapter"
+  }
+}`;
+
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("anthropic/claude-4-sonnet", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+      max_tokens: 4000,
+    },
+  })) {
+    fullResponse += event.toString();
+  }
+
+  const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(`Could not parse JSON from Claude response for Hollywood chapter ${chapterNumber} (${chapterType})`);
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
+
+// Get chapter type for a given chapter number in Hollywood mode
+function getHollywoodChapterType(chapterNumber: number): string {
+  const chapterTypes = [
+    "hook", "intro_1", "intro_2", "intro_3", "inciting_incident",
+    "early_dev_1", "early_dev_2", "early_dev_3",
+    "middle_dev_1", "middle_dev_2", "middle_dev_3",
+    "plot_twist", "climax_build_1", "climax_build_2", "climax_build_3",
+    "climax", "resolution_1", "resolution_2"
+  ];
+  return chapterTypes[chapterNumber - 1] || "intro_1";
+}
+
+// Get word count for a Hollywood chapter type
+function getHollywoodWordCount(chapterType: string): number {
+  return HOLLYWOOD_CHAPTER_CONFIG[chapterType]?.wordCount || 850;
+}
+
 async function generateStoryPreview(filmTitle: string) {
   const systemPrompt = "You are a professional film writer who creates compelling cinematic stories. Always respond with valid JSON only, no additional text.";
   
@@ -464,6 +836,15 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Expose Hollywood chapter configuration for frontend
+  app.get("/api/hollywood-chapters-config", (req, res) => {
+    const config = Object.entries(HOLLYWOOD_CHAPTER_CONFIG).map(([type, data]) => ({
+      type,
+      ...data
+    }));
+    res.json(config);
+  });
+
   app.post("/api/generate-framework", async (req, res) => {
     try {
       const { title } = req.body;
@@ -481,14 +862,15 @@ export async function registerRoutes(
 
   app.post("/api/generate-chapters-stream", async (req, res) => {
     try {
-      const { title, framework, chapterCount, wordsPerChapter } = req.body;
+      const { title, framework, chapterCount, wordsPerChapter, filmMode } = req.body;
       
       if (!title || !framework) {
         res.status(400).json({ error: "Title and framework are required" });
         return;
       }
       
-      const totalChapters = chapterCount || 5;
+      const isHollywood = filmMode === "hollywood_screenplay";
+      const totalChapters = isHollywood ? 18 : (chapterCount || 5);
       const words = wordsPerChapter || 500;
       
       res.setHeader('Content-Type', 'text/event-stream');
@@ -496,24 +878,64 @@ export async function registerRoutes(
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
       
+      // For Hollywood mode, track chapters with their types and artifacts
+      const previousHollywoodChapters: Array<{title: string; summary: string; chapterType: string; artifact?: any}> = [];
       const previousChapters: Array<{title: string; summary: string}> = [];
+      let hookContent: string | undefined;
       
       for (let i = 1; i <= totalChapters; i++) {
         try {
-          res.write(`data: ${JSON.stringify({ type: 'generating', chapterNumber: i, totalChapters })}\n\n`);
+          const chapterType = isHollywood ? getHollywoodChapterType(i) : undefined;
+          const chapterConfig = chapterType ? HOLLYWOOD_CHAPTER_CONFIG[chapterType] : null;
           
-          const chapter = await generateSingleChapter(
-            title,
-            framework,
-            i,
+          res.write(`data: ${JSON.stringify({ 
+            type: 'generating', 
+            chapterNumber: i, 
             totalChapters,
-            words,
-            previousChapters
-          );
+            chapterType,
+            chapterTitle: chapterConfig?.title,
+            phase: chapterConfig?.phase
+          })}\n\n`);
           
-          previousChapters.push({ title: chapter.title, summary: chapter.summary });
-          
-          res.write(`data: ${JSON.stringify({ type: 'chapter', chapter })}\n\n`);
+          if (isHollywood && chapterType) {
+            // Use Hollywood-specific generation
+            const chapter = await generateHollywoodChapter(
+              title,
+              framework,
+              i,
+              chapterType,
+              previousHollywoodChapters,
+              chapterType === 'climax' ? hookContent : undefined
+            );
+            
+            // Store hook content for climax callback
+            if (chapterType === 'hook') {
+              hookContent = chapter.summary;
+            }
+            
+            previousHollywoodChapters.push({ 
+              title: chapter.title, 
+              summary: chapter.summary,
+              chapterType: chapter.chapterType,
+              artifact: chapter.artifact
+            });
+            
+            res.write(`data: ${JSON.stringify({ type: 'chapter', chapter })}\n\n`);
+          } else {
+            // Use standard generation for short films
+            const chapter = await generateSingleChapter(
+              title,
+              framework,
+              i,
+              totalChapters,
+              words,
+              previousChapters
+            );
+            
+            previousChapters.push({ title: chapter.title, summary: chapter.summary });
+            
+            res.write(`data: ${JSON.stringify({ type: 'chapter', chapter })}\n\n`);
+          }
         } catch (chapterError) {
           console.error(`Error generating chapter ${i}:`, chapterError);
           res.write(`data: ${JSON.stringify({ type: 'error', chapterNumber: i, error: 'Failed to generate chapter' })}\n\n`);
@@ -645,21 +1067,68 @@ export async function registerRoutes(
 
       await storage.updateFilmStatus(req.params.id, "generating");
 
-      const numberOfChapters = req.body.numberOfChapters || film.chapterCount || 5;
+      const isHollywood = film.filmMode === "hollywood_screenplay";
+      const numberOfChapters = isHollywood ? 18 : (req.body.numberOfChapters || film.chapterCount || 5);
       const wordsPerChapter = film.wordsPerChapter || 500;
-      const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
-
+      
       const createdChapters = [];
-      for (const chapter of generatedChapters) {
-        const created = await storage.createChapter({
-          filmId: req.params.id,
-          chapterNumber: chapter.chapterNumber,
-          title: chapter.title,
-          summary: chapter.summary,
-          prompt: chapter.prompt,
-          status: "pending"
-        });
-        createdChapters.push(created);
+      
+      if (isHollywood) {
+        // Generate Hollywood chapters one by one with specialized prompts
+        const previousHollywoodChapters: Array<{title: string; summary: string; chapterType: string; artifact?: any}> = [];
+        let hookContent: string | undefined;
+        
+        for (let i = 1; i <= numberOfChapters; i++) {
+          const chapterType = getHollywoodChapterType(i);
+          
+          const chapter = await generateHollywoodChapter(
+            film.title,
+            framework,
+            i,
+            chapterType,
+            previousHollywoodChapters,
+            chapterType === 'climax' ? hookContent : undefined
+          );
+          
+          // Store hook content for climax callback
+          if (chapterType === 'hook') {
+            hookContent = chapter.summary;
+          }
+          
+          previousHollywoodChapters.push({
+            title: chapter.title,
+            summary: chapter.summary,
+            chapterType: chapter.chapterType,
+            artifact: chapter.artifact
+          });
+          
+          const created = await storage.createChapter({
+            filmId: req.params.id,
+            chapterNumber: chapter.chapterNumber,
+            chapterType: chapter.chapterType,
+            title: chapter.title,
+            summary: chapter.summary,
+            prompt: chapter.prompt,
+            artifact: chapter.artifact,
+            status: "pending"
+          });
+          createdChapters.push(created);
+        }
+      } else {
+        // Standard short film generation
+        const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
+
+        for (const chapter of generatedChapters) {
+          const created = await storage.createChapter({
+            filmId: req.params.id,
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title,
+            summary: chapter.summary,
+            prompt: chapter.prompt,
+            status: "pending"
+          });
+          createdChapters.push(created);
+        }
       }
 
       await storage.updateFilmStatus(req.params.id, "draft");

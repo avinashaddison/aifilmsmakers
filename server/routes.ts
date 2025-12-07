@@ -465,15 +465,19 @@ Reference the recurring symbolic object established in Chapter 1: "${previousCha
 - It must appear meaningfully, not just mentioned in passing
 - Its presence should carry emotional weight`;
 
+  const charactersText = framework.characters && Array.isArray(framework.characters)
+    ? framework.characters.map((c: any) => `${c.name} (${c.role}): ${c.description}`).join('\n')
+    : 'No characters defined yet';
+
   const userPrompt = `Create "${config.title}" (Chapter ${chapterNumber} of 18) for a Hollywood screenplay.
 
 FILM DETAILS:
 Title: "${filmTitle}"
-Premise: ${framework.premise}
-Genres: ${Array.isArray(framework.genres) ? framework.genres.join(', ') : framework.genre}
-Tone: ${framework.tone}
-Setting: ${JSON.stringify(framework.setting)}
-Characters: ${framework.characters.map((c: any) => `${c.name} (${c.role}): ${c.description}`).join('\n')}
+Premise: ${framework.premise || 'Not yet defined'}
+Genres: ${Array.isArray(framework.genres) ? framework.genres.join(', ') : (framework.genre || 'Drama')}
+Tone: ${framework.tone || 'Dramatic'}
+Setting: ${framework.setting ? JSON.stringify(framework.setting) : 'Not yet defined'}
+Characters: ${charactersText}
 ${previousContext}
 ${hookReference}
 

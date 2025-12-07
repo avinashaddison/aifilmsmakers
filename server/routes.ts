@@ -325,45 +325,73 @@ The symbolic object in its final resting place. Create a sense of completion but
   }
 };
 
-// Hollywood screenplay mandatory writing techniques
+// Hollywood screenplay mandatory writing techniques - for mature 50+ audience
 const HOLLYWOOD_STYLE_REQUIREMENTS = `
-⭐ MANDATORY WRITING TECHNIQUES:
+⭐ MANDATORY WRITING TECHNIQUES FOR MATURE AUDIENCE (50+):
+
+VOICE & PERSPECTIVE:
+- Write as a veteran Hollywood screenwriter with 30 years of experience
+- Reflective, emotionally heavy, deeply human
+- Classic literary prose - the kind that wins Academy Awards
+- NO slang. NO modern jargon. NO internet tone.
+- Everything must feel timeless, as if written in 1994 by a master
 
 TONE:
-- Cinematic
-- Mature
-- Slow-burn
-- Emotional
-- Reflective
-- No slang, no jargon
+- Cinematic grandeur with intimate emotional depth
+- Mature themes: mortality, regret, reconciliation, legacy
+- Slow-burn pacing that respects the audience's intelligence
+- Emotional weight that accumulates across chapters
+- Reflective, contemplative, never rushed
+
+PROSE STYLE:
+- Sentences that breathe - vary rhythm between long flowing passages and short punches
+- Literary but accessible - Hemingway meets Cormac McCarthy
+- Specificity over generality - name the exact hour, the exact shade of light
+- Subtext carries the emotional weight, not exposition
+- Every word must earn its place
 
 SCENE CRAFTING (Every chapter must utilize):
-- Lighting
-- Sound
-- Textures
-- Weather
-- Shadows
-- Body language
-- Symbolic objects
-- Nostalgia
-- Subtle emotional cues
+- Lighting that tells emotional truth (golden hour, harsh fluorescent, candlelight)
+- Sound design (distant train whistles, clock ticking, rain on windows)
+- Textures (worn leather, cold metal, rough hands)
+- Weather as emotional mirror (fog, autumn leaves, summer heat)
+- Shadows and negative space
+- Body language that speaks louder than dialogue
+- Symbolic objects carrying generational weight
+- Nostalgia woven into setting details
+- Subtle emotional cues in gesture and glance
 
-DIALOGUE:
-- Minimalistic
-- Heavy subtext
-- Shaped by age, wisdom, and lived experience
+DIALOGUE RULES:
+- Minimalistic - less is always more
+- Heavy subtext - what isn't said matters most
+- Shaped by decades of lived experience
+- Characters speak with the weight of their years
+- No exposition through dialogue - show through action
+- Silences are as important as words
 
-THEMATIC CONSISTENCY:
-- Themes of memory, loss, legacy, and transformation must appear subtly throughout
+THEMATIC DEPTH:
+- Memory and how it deceives
+- Loss that defines identity
+- Legacy we leave behind
+- Transformation through suffering
+- Reconciliation with the past
+- The weight of time
+- Love that endures through silence
 
 STRICT SYMBOLISM RULE:
-- Each chapter must feature one significant symbolic object that ties into the emotional arc
+- Each chapter must feature ONE significant symbolic object
+- The object must carry emotional and thematic weight
+- It should connect past and present
+- Its meaning must evolve as the story progresses
 
-TECHNICAL RULES:
-- Write in third-person limited perspective
-- Use "." for pauses, never use "..."
-- Show emotions through physical sensations and actions
-- Every scene must advance character or plot`;
+TECHNICAL REQUIREMENTS:
+- Third-person limited perspective, deep POV
+- Use "." for pauses (He waited. A long breath. Then spoke.)
+- Never use "..." - it's amateur
+- Show emotions through physical sensations (tight chest, cold hands, dry mouth)
+- Every scene must advance character OR plot, preferably both
+- Paragraph breaks for emphasis and pacing
+- Sensory details anchor every scene in physical reality`;
 
 async function generateHollywoodChapter(
   filmTitle: string,
@@ -385,14 +413,32 @@ async function generateHollywoodChapter(
     throw new Error(`Unknown chapter type: ${chapterType}`);
   }
 
-  const systemPrompt = `You are an award-winning Hollywood screenwriter crafting a cinematic masterpiece. Your writing style is:
-- Cinematic, mature, slow-burn, emotional, and reflective
-- No slang or modern jargon
-- Rich in sensory detail: lighting, sound, textures, weather, shadows
-- Heavy on body language and subtle emotional cues
-- Minimalistic dialogue with deep subtext
+  const systemPrompt = `You are a veteran Hollywood screenwriter with 30 years of experience, known for Academy Award-caliber work. Your films resonate deeply with mature audiences (50+) who appreciate:
+- Classic, literary prose that feels timeless
+- Emotional depth earned through restraint, not melodrama
+- The weight of lived experience in every word
 
-You write with the depth of literary fiction and the pacing of cinema. Every scene must feel like it could be filmed.
+YOUR VOICE:
+- Reflective, contemplative, deeply human
+- Hemingway's precision meets Cormac McCarthy's poetry
+- NO slang. NO modern jargon. NO internet tone. NO clichés.
+- Write as if crafting a film that will be studied for decades
+
+YOUR CRAFT:
+- Sensory-rich scenes anchored in physical reality
+- Lighting, weather, and texture tell emotional truth
+- Body language speaks louder than dialogue
+- Silence carries as much weight as words
+- Subtext is where the real story lives
+
+THEMES YOU EXPLORE:
+- Mortality and the passage of time
+- Regret and reconciliation
+- Legacy we leave behind
+- Love that endures through decades
+- The weight of memory
+
+This is a 15,000-16,000 word cinematic screenplay across 18 chapters.
 
 CRITICAL: Always respond with valid JSON only. No additional text, no markdown, no code blocks. Pure JSON.`;
 

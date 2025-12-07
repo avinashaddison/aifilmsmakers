@@ -84,7 +84,7 @@ Make it cinematic, compelling, and suitable for video generation.`;
 
   let fullResponse = "";
   
-  for await (const event of replicate.stream("anthropic/claude-4-sonnet", {
+  for await (const event of replicate.stream("openai/gpt-4o-mini", {
     input: {
       prompt: userPrompt,
       system_prompt: systemPrompt,
@@ -95,7 +95,7 @@ Make it cinematic, compelling, and suitable for video generation.`;
 
   const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("Could not parse JSON from Claude response");
+    throw new Error("Could not parse JSON from GPT response");
   }
 
   return JSON.parse(jsonMatch[0]);

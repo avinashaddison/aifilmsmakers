@@ -63,6 +63,27 @@ export default function Chapters() {
   const [chapterConfig, setChapterConfig] = useState<HollywoodChapterConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedArtifact, setExpandedArtifact] = useState<number | null>(null);
+  const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
+
+  const toggleChapterExpand = (chapterId: number) => {
+    setExpandedChapters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chapterId)) {
+        newSet.delete(chapterId);
+      } else {
+        newSet.add(chapterId);
+      }
+      return newSet;
+    });
+  };
+
+  const expandAllChapters = () => {
+    setExpandedChapters(new Set(chapters.map(c => c.id)));
+  };
+
+  const collapseAllChapters = () => {
+    setExpandedChapters(new Set());
+  };
   const filmId = params?.filmId;
 
   useEffect(() => {
@@ -192,7 +213,15 @@ export default function Chapters() {
             </div>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          <Button 
+            variant="outline" 
+            className="border-white/10 hover:bg-white/5 text-white"
+            onClick={expandedChapters.size === chapters.length ? collapseAllChapters : expandAllChapters}
+            data-testid="button-toggle-all-chapters"
+          >
+            {expandedChapters.size === chapters.length ? "Collapse All" : "Expand All"}
+          </Button>
            <Button 
              variant="outline" 
              className="border-white/10 hover:bg-white/5 text-white"
@@ -291,12 +320,24 @@ export default function Chapters() {
                             </p>
                           )}
                           
-                          <p 
-                            className="text-gray-400 text-sm md:text-base max-w-3xl line-clamp-3"
-                            data-testid={`text-chapter-summary-${chapter.id}`}
-                          >
-                            {chapter.summary}
-                          </p>
+                          <div className="space-y-2">
+                            <p 
+                              className={cn(
+                                "text-gray-400 text-sm md:text-base max-w-3xl whitespace-pre-wrap",
+                                !expandedChapters.has(chapter.id) && "line-clamp-3"
+                              )}
+                              data-testid={`text-chapter-summary-${chapter.id}`}
+                            >
+                              {chapter.summary}
+                            </p>
+                            <button
+                              onClick={() => toggleChapterExpand(chapter.id)}
+                              className="text-primary text-xs font-semibold hover:text-primary/80 transition-colors"
+                              data-testid={`button-expand-chapter-${chapter.id}`}
+                            >
+                              {expandedChapters.has(chapter.id) ? "Show Less ▲" : "Read Full Chapter ▼"}
+                            </button>
+                          </div>
                           
                           {chapter.artifact && (
                             <div className="mt-3">

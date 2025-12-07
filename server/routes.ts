@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } from "@shared/schema";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
+import Replicate from "replicate";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 const anthropic = new Anthropic({
@@ -11,10 +12,16 @@ const anthropic = new Anthropic({
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
-async function generateStoryPreview(filmTitle: string) {
-  const prompt = `You are a professional film writer. Based on the film title "${filmTitle}", generate a quick preview with:
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
-Generate a JSON response with this exact structure:
+async function generateStoryPreview(filmTitle: string) {
+  const systemPrompt = "You are a professional film writer who creates compelling cinematic stories. Always respond with valid JSON only, no additional text.";
+  
+  const userPrompt = `Based on the film title "${filmTitle}", generate a quick preview.
+
+Generate a JSON response with this exact structure (no markdown, just pure JSON):
 {
   "genres": ["Primary Genre", "Secondary Genre"],
   "premise": "A compelling 2-3 sentence premise of the film",
@@ -23,20 +30,20 @@ Generate a JSON response with this exact structure:
 
 Make it cinematic, emotionally engaging, and suitable for video adaptation.`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 500,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("openai/gpt-4o-mini", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+    },
+  })) {
+    fullResponse += event.toString();
   }
 
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("Could not parse JSON from Claude response");
+    throw new Error("Could not parse JSON from GPT-4o-mini response");
   }
 
   return JSON.parse(jsonMatch[0]);

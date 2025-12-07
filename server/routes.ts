@@ -613,46 +613,78 @@ IMPORTANT:
 
 Make it cinematic, compelling, and suitable for video generation.`;
 
-  let fullResponse = "";
+  const maxRetries = 3;
   
-  for await (const event of replicate.stream("openai/gpt-4o-mini", {
-    input: {
-      prompt: userPrompt,
-      system_prompt: systemPrompt,
-    },
-  })) {
-    fullResponse += event.toString();
-  }
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let fullResponse = "";
+    
+    try {
+      for await (const event of replicate.stream("openai/gpt-4o-mini", {
+        input: {
+          prompt: userPrompt,
+          system_prompt: systemPrompt,
+          max_tokens: 2000,
+        },
+      })) {
+        fullResponse += event.toString();
+      }
 
-  // Try multiple JSON extraction patterns
-  let jsonStr: string | null = null;
-  
-  // First, try to extract from markdown code blocks
-  const codeBlockMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (codeBlockMatch) {
-    jsonStr = codeBlockMatch[1].trim();
-  }
-  
-  // If no code block, try to find raw JSON object
-  if (!jsonStr) {
-    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
+      // Try multiple JSON extraction patterns
+      let jsonStr: string | null = null;
+      
+      // First, try to extract from markdown code blocks
+      const codeBlockMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1].trim();
+      }
+      
+      // If no code block, try to find raw JSON object
+      if (!jsonStr) {
+        const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
+      }
+      
+      if (!jsonStr) {
+        console.error(`Attempt ${attempt}: Failed to extract JSON from response:`, fullResponse.substring(0, 500));
+        if (attempt === maxRetries) {
+          throw new Error("Could not parse JSON from GPT response after multiple attempts");
+        }
+        continue;
+      }
+
+      // Check if JSON looks complete (ends with closing brace)
+      const trimmedJson = jsonStr.trim();
+      if (!trimmedJson.endsWith('}')) {
+        console.error(`Attempt ${attempt}: JSON appears truncated, retrying...`);
+        if (attempt === maxRetries) {
+          throw new Error("Received truncated JSON response after multiple attempts");
+        }
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonStr);
+      
+      // Validate the response has required fields
+      if (!parsed.genres || !parsed.premise || !parsed.characters) {
+        console.error(`Attempt ${attempt}: Response missing required fields, retrying...`);
+        if (attempt === maxRetries) {
+          throw new Error("Response missing required fields after multiple attempts");
+        }
+        continue;
+      }
+      
+      return parsed;
+    } catch (parseError: any) {
+      console.error(`Attempt ${attempt} JSON parse error:`, parseError.message);
+      if (attempt === maxRetries) {
+        throw new Error(`Failed to parse story framework JSON after ${maxRetries} attempts: ${parseError.message}`);
+      }
     }
   }
   
-  if (!jsonStr) {
-    console.error("Failed to parse JSON from response:", fullResponse.substring(0, 500));
-    throw new Error("Could not parse JSON from GPT response");
-  }
-
-  try {
-    return JSON.parse(jsonStr);
-  } catch (parseError) {
-    console.error("JSON parse error:", parseError);
-    console.error("Attempted to parse:", jsonStr.substring(0, 500));
-    throw new Error(`Failed to parse story framework JSON: ${parseError}`);
-  }
+  throw new Error("Failed to generate story framework after all retry attempts");
 }
 
 async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5, wordsPerChapter: number = 500) {

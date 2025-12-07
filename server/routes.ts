@@ -5,6 +5,9 @@ import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } fro
 import { z } from "zod";
 import Replicate from "replicate";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { spawn } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -170,6 +173,222 @@ Each prompt should capture a key moment from the chapter and be optimized for AI
   }
 
   return JSON.parse(jsonMatch[0]);
+}
+
+async function downloadVideoToTemp(objectPath: string): Promise<string> {
+  const objectStorageService = new ObjectStorageService();
+  const signedUrl = await objectStorageService.getSignedDownloadUrl(objectPath);
+  
+  const tempPath = path.join("/tmp", `video_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+  
+  const response = await fetch(signedUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download video from ${objectPath}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  fs.writeFileSync(tempPath, buffer);
+  
+  return tempPath;
+}
+
+async function mergeVideosWithFFmpeg(inputPaths: string[], outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fileListPath = path.join("/tmp", `filelist_${Date.now()}.txt`);
+    const fileListContent = inputPaths.map(p => `file '${p}'`).join('\n');
+    fs.writeFileSync(fileListPath, fileListContent);
+    
+    console.log(`Merging ${inputPaths.length} videos to ${outputPath}`);
+    console.log(`File list content:\n${fileListContent}`);
+    
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', fileListPath,
+      '-c', 'copy',
+      outputPath
+    ]);
+    
+    let stderr = '';
+    ffmpeg.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    ffmpeg.on('close', (code) => {
+      fs.unlinkSync(fileListPath);
+      
+      if (code === 0) {
+        console.log(`FFmpeg merge completed successfully`);
+        resolve();
+      } else {
+        console.error(`FFmpeg stderr: ${stderr}`);
+        reject(new Error(`FFmpeg exited with code ${code}`));
+      }
+    });
+    
+    ffmpeg.on('error', (err) => {
+      fs.unlinkSync(fileListPath);
+      reject(err);
+    });
+  });
+}
+
+async function uploadMergedVideo(localPath: string): Promise<{ objectPath: string; publicPath: string }> {
+  const objectStorageService = new ObjectStorageService();
+  const privateObjectDir = objectStorageService.getPrivateObjectDir();
+  const objectId = `merged_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const fullPath = `${privateObjectDir}/videos/${objectId}.mp4`;
+  
+  const { bucketName, objectName } = parseObjectPathInternal(fullPath);
+  const { objectStorageClient } = await import('./objectStorage');
+  const { setObjectAclPolicy } = await import('./objectAcl');
+  const bucket = objectStorageClient.bucket(bucketName);
+  const file = bucket.file(objectName);
+  
+  const buffer = fs.readFileSync(localPath);
+  await file.save(buffer, {
+    contentType: 'video/mp4',
+    resumable: false,
+  });
+  
+  await setObjectAclPolicy(file, {
+    owner: "system",
+    visibility: "public",
+  });
+  
+  return {
+    objectPath: `/objects/videos/${objectId}.mp4`,
+    publicPath: `/objects/videos/${objectId}.mp4`
+  };
+}
+
+function parseObjectPathInternal(objPath: string): { bucketName: string; objectName: string } {
+  if (!objPath.startsWith("/")) {
+    objPath = `/${objPath}`;
+  }
+  const pathParts = objPath.split("/");
+  if (pathParts.length < 3) {
+    throw new Error("Invalid path: must contain at least a bucket name");
+  }
+  const bucketName = pathParts[1];
+  const objectName = pathParts.slice(2).join("/");
+  return { bucketName, objectName };
+}
+
+function parseDurationToSeconds(duration: string | number | null | undefined): number {
+  if (typeof duration === 'number') return duration;
+  if (!duration) return 30;
+  
+  const parts = duration.split(':');
+  if (parts.length === 2) {
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  } else if (parts.length === 3) {
+    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  }
+  return parseInt(duration) || 30;
+}
+
+async function mergeChapterVideos(chapter: any): Promise<{ videoUrl: string; objectPath: string; duration: number }> {
+  const videoFrames = chapter.videoFrames || [];
+  const completedFrames = videoFrames.filter((f: any) => f.status === "completed" && f.objectPath);
+  
+  if (completedFrames.length === 0) {
+    throw new Error(`No completed video frames to merge for chapter ${chapter.chapterNumber}`);
+  }
+  
+  console.log(`Merging ${completedFrames.length} videos for chapter ${chapter.chapterNumber}`);
+  
+  const tempInputPaths: string[] = [];
+  const outputPath = path.join("/tmp", `chapter_${chapter.id}_merged.mp4`);
+  
+  try {
+    for (const frame of completedFrames) {
+      const tempPath = await downloadVideoToTemp(frame.objectPath);
+      tempInputPaths.push(tempPath);
+    }
+    
+    await mergeVideosWithFFmpeg(tempInputPaths, outputPath);
+    
+    const uploadResult = await uploadMergedVideo(outputPath);
+    
+    const estimatedDuration = completedFrames.length * 10;
+    
+    return {
+      videoUrl: uploadResult.publicPath,
+      objectPath: uploadResult.objectPath,
+      duration: estimatedDuration
+    };
+  } finally {
+    for (const tempPath of tempInputPaths) {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch (e) {
+        console.error(`Failed to cleanup temp file ${tempPath}:`, e);
+      }
+    }
+    try {
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+      }
+    } catch (e) {
+      console.error(`Failed to cleanup output file ${outputPath}:`, e);
+    }
+  }
+}
+
+async function mergeFinalMovie(chapters: any[], filmId: string): Promise<{ videoUrl: string; objectPath: string; duration: number }> {
+  const chaptersWithVideos = chapters
+    .filter(c => c.objectPath && c.status === "completed")
+    .sort((a, b) => a.chapterNumber - b.chapterNumber);
+  
+  if (chaptersWithVideos.length === 0) {
+    throw new Error(`No completed chapter videos to merge for film ${filmId}`);
+  }
+  
+  console.log(`Merging ${chaptersWithVideos.length} chapter videos for final movie`);
+  
+  const tempInputPaths: string[] = [];
+  const outputPath = path.join("/tmp", `film_${filmId}_final.mp4`);
+  
+  try {
+    for (const chapter of chaptersWithVideos) {
+      const tempPath = await downloadVideoToTemp(chapter.objectPath);
+      tempInputPaths.push(tempPath);
+    }
+    
+    await mergeVideosWithFFmpeg(tempInputPaths, outputPath);
+    
+    const uploadResult = await uploadMergedVideo(outputPath);
+    
+    const totalDuration = chaptersWithVideos.reduce((sum, c) => sum + parseDurationToSeconds(c.duration), 0);
+    
+    return {
+      videoUrl: uploadResult.publicPath,
+      objectPath: uploadResult.objectPath,
+      duration: totalDuration
+    };
+  } finally {
+    for (const tempPath of tempInputPaths) {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch (e) {
+        console.error(`Failed to cleanup temp file ${tempPath}:`, e);
+      }
+    }
+    try {
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+      }
+    } catch (e) {
+      console.error(`Failed to cleanup output file ${outputPath}:`, e);
+    }
+  }
 }
 
 export async function registerRoutes(
@@ -924,22 +1143,57 @@ async function runFilmGenerationPipeline(filmId: string) {
     }
   }
 
-  // Step 8: Update stage to merging_chapters (placeholder for now)
+  // Step 8: Merge chapter videos
   await storage.updateFilm(filmId, { generationStage: "merging_chapters" });
   
-  // Mark all chapters as completed for now (merging will be implemented later)
   chapters = await storage.getChaptersByFilmId(filmId);
   for (const chapter of chapters) {
     if (chapter.status === "merging") {
-      await storage.updateChapter(chapter.id, { status: "completed" });
+      try {
+        console.log(`Merging videos for chapter ${chapter.chapterNumber}...`);
+        const mergeResult = await mergeChapterVideos(chapter);
+        
+        await storage.updateChapter(chapter.id, { 
+          status: "completed",
+          videoUrl: mergeResult.videoUrl,
+          objectPath: mergeResult.objectPath,
+          duration: `00:${String(mergeResult.duration).padStart(2, '0')}`
+        });
+        
+        console.log(`Chapter ${chapter.chapterNumber} merged successfully: ${mergeResult.objectPath}`);
+      } catch (mergeError) {
+        console.error(`Failed to merge chapter ${chapter.chapterNumber}:`, mergeError);
+        await storage.updateChapter(chapter.id, { status: "failed" });
+      }
     }
   }
 
-  // Step 9: Update stage to merging_final
+  // Step 9: Merge all chapter videos into final movie
   await storage.updateFilm(filmId, { generationStage: "merging_final" });
-
-  // Step 10: Mark as completed
-  await storage.updateFilm(filmId, { generationStage: "completed" });
+  
+  chapters = await storage.getChaptersByFilmId(filmId);
+  const completedChapters = chapters.filter(c => c.status === "completed" && c.objectPath);
+  
+  if (completedChapters.length > 0) {
+    try {
+      console.log(`Merging ${completedChapters.length} chapters into final movie...`);
+      const finalResult = await mergeFinalMovie(completedChapters, filmId);
+      
+      await storage.updateFilm(filmId, { 
+        generationStage: "completed",
+        finalVideoUrl: finalResult.videoUrl,
+        finalVideoPath: finalResult.objectPath
+      });
+      
+      console.log(`Final movie merged successfully: ${finalResult.objectPath}`);
+    } catch (finalMergeError) {
+      console.error(`Failed to merge final movie:`, finalMergeError);
+      await storage.updateFilm(filmId, { generationStage: "failed" });
+    }
+  } else {
+    console.log(`No completed chapters to merge for final movie`);
+    await storage.updateFilm(filmId, { generationStage: "completed" });
+  }
   
   console.log(`Film generation pipeline completed for film ${filmId}`);
 }

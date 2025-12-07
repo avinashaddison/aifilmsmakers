@@ -305,10 +305,10 @@ export default function Chapters() {
                                   expandedArtifact === chapter.id ? null : chapter.id
                                 )}
                                 className="flex items-center gap-2 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                                data-testid={`button-artifact-${chapter.id}`}
+                                data-testid={`button-symbolic-object-${chapter.id}`}
                               >
                                 <Sparkles className="w-3 h-3" />
-                                Artifact: {chapter.artifact.name}
+                                Symbolic Object: {chapter.artifact.name}
                               </button>
                               
                               {expandedArtifact === chapter.id && (

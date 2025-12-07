@@ -14,6 +14,7 @@ const replicate = new Replicate({
 });
 
 // Hollywood Screenplay 18-Chapter Structure Configuration
+// Based on professional Hollywood screenplay template
 const HOLLYWOOD_CHAPTER_CONFIG: Record<string, {
   title: string;
   wordCount: number;
@@ -22,256 +23,347 @@ const HOLLYWOOD_CHAPTER_CONFIG: Record<string, {
   requirements: string;
 }> = {
   hook: {
-    title: "The Hook",
+    title: "The Shattering Moment",
     wordCount: 150,
     phase: "Opening",
-    description: "A glimpse of the ending without context or explanation",
-    requirements: `Write ONLY 150 words. This is a flash-forward scene showing a powerful moment from the climax.
-- Show the protagonist at their most vulnerable or powerful moment
-- Include a symbolic artifact that will gain meaning later
-- Create mystery - the reader should not understand WHY this is happening
-- Use present tense, visceral sensory details
-- End mid-action, leaving the reader desperate to understand`
+    description: "A devastating glimpse of the ending without context",
+    requirements: `MANDATORY: Write EXACTLY 150 words. Not 149. Not 151. Exactly 150.
+
+Open with a devastating, visually rich moment taken directly from the climax or near-end of the film.
+
+Requirements:
+- Heavy emotional weight
+- A sense of irreversible loss
+- Trembling hands
+- A broken symbolic object
+- A decision that cannot be undone
+- Atmospheric detail (weather, light, texture, sound)
+- Mystery: nothing is explained
+
+The viewer must silently think: "Dear God. what happened here."
+
+No call-to-action. Pure cinematic pain.`
   },
   intro_1: {
     title: "Before the Fall",
     wordCount: 850,
     phase: "Act 1 - World Building",
-    description: "Introduction to the protagonist's ordinary world",
-    requirements: `Write 800-900 words. Establish the protagonist's world BEFORE everything changes.
-- Introduce the protagonist through action, not description
-- Show their daily routines, environment, relationships
-- Hint at their internal flaw or wound without stating it directly
-- Introduce the artifact in its ordinary context
-- Create sensory-rich descriptions of their world
-- Plant seeds of what they're about to lose`
+    description: "The protagonist's world in its former stability",
+    requirements: `Write 800-900 words. Show the protagonist's world in its former stability.
+
+Build emotional investment through:
+- Slow, atmospheric description
+- Rich sensory detail (light, texture, sound, weather)
+- Daily routines that feel deeply lived
+- Hints of buried regret or quiet longing
+- The symbolic object in its ordinary, meaningful context
+
+This is a world worth losing.`
   },
   intro_2: {
     title: "Quiet Routines & Hidden Cracks",
     wordCount: 850,
     phase: "Act 1 - World Building",
-    description: "Deeper exploration of relationships and subtle flaws",
-    requirements: `Write 800-900 words. Deepen the world while revealing hidden tensions.
-- Show the protagonist's key relationships in action
-- Reveal their character flaw through behavior, not exposition
-- Include moments of irony (what they don't know is coming)
-- The artifact appears again in a meaningful context
-- Small moments of foreshadowing
-- Build reader investment in this world before it shatters`
+    description: "Important relationships and emotional wounds beneath the surface",
+    requirements: `Write 800-900 words. Life feels stable. but fragile.
+
+Focus on:
+- Important relationships
+- Emotional wounds beneath the surface
+- Gestures instead of exposition
+- Subtle foreshadowing of the Hook
+- Symbolic objects or places
+
+Show through body language and micro-expressions, not dialogue or narration.`
   },
   intro_3: {
     title: "The Life They Thought They Had",
     wordCount: 850,
     phase: "Act 1 - World Building",
-    description: "The final moments of normalcy before disruption",
-    requirements: `Write 800-900 words. This is the last moment of peace.
-- Create a sense of false security and contentment
-- Show the protagonist making plans or assumptions about the future
-- Include a pivotal relationship moment
-- The artifact appears in a way that seems insignificant
-- Build dramatic irony - readers should feel dread
-- End with subtle warning signs that something is about to change`
+    description: "Deepening the personal world as shadows form",
+    requirements: `Write 800-900 words. Everything still appears safe, but shadows are forming.
+
+Deepen their personal world:
+- Workplace or home environment
+- Past memories shaping present behavior
+- Unspoken tensions
+- Fears, flaws, and values
+- The symbolic object appears in a way that seems insignificant
+
+Build dramatic irony - the reader should feel dread for what's coming.`
   },
   inciting_incident: {
     title: "The First Disturbance",
     wordCount: 850,
     phase: "Act 1 - Inciting Incident",
-    description: "The event that disrupts the protagonist's world",
-    requirements: `Write 800-900 words. This is the moment everything changes.
-- Create a clear, specific disrupting event
-- Show the protagonist's immediate visceral reaction
-- The event should feel both surprising and inevitable
-- The artifact gains new significance or appears in a new context
-- Other characters should react, showing the ripple effects
-- End with the protagonist in uncertainty - their old world is gone`
+    description: "A moment that shatters stability",
+    requirements: `Write 800-900 words. A moment that shatters stability.
+
+It must be:
+- Unexpected
+- Emotionally painful
+- Irreversible
+- Morally complex
+
+Describe:
+- The shock
+- The silence after the shock
+- The broken gaze or trembling gesture that confirms life has changed
+
+From here, nothing can go back.`
   },
   early_dev_1: {
     title: "Shockwaves",
     wordCount: 850,
     phase: "Act 2 - Rising Action",
-    description: "The immediate aftermath and spreading effects of the disruption",
-    requirements: `Write 800-900 words. Show how the disruption spreads through the protagonist's life.
-- Multiple areas of life begin to be affected
-- The protagonist tries to process what happened
-- Relationships begin to shift or strain
-- New conflicts emerge from the initial incident
-- The artifact becomes a point of emotional focus
-- Build a sense of mounting pressure`
+    description: "How the disturbance disrupts routine, balance, and relationships",
+    requirements: `Write 800-900 words. Pain is quiet, not loud.
+
+Show how the disturbance disrupts:
+- Routine
+- Emotional balance
+- Relationships
+
+Use micro-expressions:
+- Hands tightening around objects
+- Interrupted sentences
+- Long pauses
+- Avoided eye contact
+
+The symbolic object becomes a point of emotional focus.`
   },
   early_dev_2: {
     title: "Attempts to Restore Control",
     wordCount: 850,
     phase: "Act 2 - Rising Action",
-    description: "The protagonist's first attempts to fix things (which fail)",
-    requirements: `Write 800-900 words. Show the protagonist's doomed attempts to restore normalcy.
-- They try logical, reasonable solutions that don't work
-- Their character flaw begins to sabotage their efforts
-- Secondary characters may offer help or hindrance
-- The artifact serves as a reminder of what was lost
-- Each attempt should fail in a way that raises stakes
-- Build frustration and desperation`
+    description: "The protagonist tries to fix their world - every attempt fails",
+    requirements: `Write 800-900 words. The protagonist tries to fix their world. Every attempt fails.
+
+Include:
+- Guilt
+- Denial
+- Fear
+- Stubbornness
+- Emotional missteps
+
+Attempts to recover control only reveal deeper fractures. The symbolic object serves as a reminder of what was lost.`
   },
   early_dev_3: {
     title: "Complications & Subplots",
     wordCount: 850,
     phase: "Act 2 - Rising Action",
-    description: "New problems emerge, secondary characters take focus",
-    requirements: `Write 800-900 words. Expand the story's scope with complications.
-- Introduce or deepen secondary storylines
-- New obstacles emerge that weren't anticipated
-- A secondary character faces their own crisis
-- The artifact appears in connection with another character
-- Create moments of dark humor or brief respite
-- Weave together multiple threads of tension`
+    description: "Secondary characters with stakes, external pressures",
+    requirements: `Write 800-900 words. Life tightens around them.
+
+Introduce:
+- Secondary characters with their own stakes
+- A subplot connected to the theme
+- External pressures (money, time, loyalty, distance, health)
+- Emotional blindness causing conflict
+
+The symbolic object appears in connection with another character.`
   },
   middle_dev_1: {
     title: "The Deepening Storm",
     wordCount: 850,
     phase: "Act 2 - Midpoint",
-    description: "Escalation of conflicts, raising stakes significantly",
-    requirements: `Write 800-900 words. Intensify every conflict dramatically.
-- Stakes become personal and immediate
-- The protagonist makes a crucial decision or discovery
-- A major relationship is tested or damaged
-- The artifact reveals hidden meaning or history
-- Create a sense that there's no going back
-- Build toward a point of no return`
+    description: "Tension rises as shadows lengthen and safety disappears",
+    requirements: `Write 800-900 words. Shadows lengthen. Safety disappears.
+
+Tension rises through:
+- Darker settings
+- Heavier silence
+- Physical and emotional exhaustion
+- Rising stakes
+- The symbolic object reveals hidden meaning or history
+
+Create a sense that there's no going back.`
   },
   middle_dev_2: {
     title: "Truths Rising from the Past",
     wordCount: 850,
     phase: "Act 2 - Midpoint",
-    description: "Revelations about characters' histories and hidden truths",
-    requirements: `Write 800-900 words. Uncover secrets and hidden histories.
-- A significant truth about the past is revealed
-- This revelation reframes earlier events
-- Characters must confront uncomfortable truths
-- The artifact is connected to this revelation
-- Relationships shift based on new understanding
-- Create emotional complexity - truth is liberating but painful`
+    description: "Revelations from the past that deepen the emotional core",
+    requirements: `Write 800-900 words. This chapter deepens the emotional core.
+
+Reveal something from the past:
+- Old mistakes
+- Unresolved regrets
+- Painful memories
+- Forgotten letters, photos, or objects laden with meaning
+
+The symbolic object is connected to this revelation. Create emotional complexity - truth is liberating but painful.`
   },
   middle_dev_3: {
     title: "The Breaking Point",
     wordCount: 850,
     phase: "Act 2 - Midpoint",
-    description: "The protagonist's emotional and psychological collapse",
-    requirements: `Write 800-900 words. Show the protagonist at their lowest.
-- Their usual coping mechanisms fail completely
-- A moment of complete vulnerability or breakdown
-- They may lash out or retreat from others
-- The artifact becomes a focal point of their pain
-- This is their "dark night of the soul"
-- End with them seemingly defeated, but a spark of change`
+    description: "The protagonist reaches emotional collapse",
+    requirements: `Write 800-900 words. This moment should feel suffocating.
+
+The protagonist reaches emotional collapse. Show:
+- Trembling hands
+- Raised voices or total silence
+- Breaking objects
+- Walking away
+- Collapsing into chairs
+
+The symbolic object becomes a focal point of their pain.`
   },
   plot_twist: {
     title: "The Plot Twist",
     wordCount: 1500,
     phase: "Act 2 - Major Revelation",
-    description: "A major revelation that changes everything the reader thought they knew",
-    requirements: `Write 1400-1500 words. This is the story's major turning point.
-- Reveal a truth that reframes the entire narrative
-- This revelation should be surprising but inevitable in hindsight
-- Plant payoffs for earlier foreshadowing
-- The artifact's true significance is revealed
-- Multiple characters are affected by this truth
-- Create a moment of profound realization
-- Show immediate emotional fallout
-- This chapter should feel like the story breaking open
-- End with the protagonist fundamentally changed by this knowledge`
+    description: "A revelation that changes the meaning of everything",
+    requirements: `Write EXACTLY 1,500 words. This is the story's major turning point.
+
+A revelation that:
+- Changes the meaning of everything
+- Reframes earlier scenes
+- Connects directly to the Hook
+- Forces confrontation with truth
+- Cuts deeply
+- Feels earned, not convenient
+
+The twist must be tragic, human, and impossible to ignore.
+The symbolic object's true significance is revealed.
+Show immediate emotional fallout.
+End with the protagonist fundamentally changed by this knowledge.`
   },
   climax_build_1: {
     title: "Aftermath of the Truth",
     wordCount: 850,
     phase: "Act 3 - Rising to Climax",
-    description: "Processing the revelation and its implications",
-    requirements: `Write 800-900 words. Show characters absorbing the truth.
-- The protagonist processes what they've learned
-- Relationships reconfigure around the new reality
-- Some characters reject the truth, others embrace it
-- The artifact takes on new meaning post-revelation
-- Begin to see the path forward, however difficult
-- Plant seeds for the final confrontation`
+    description: "The emotional shock settling in",
+    requirements: `Write 800-900 words. Nothing feels stable.
+
+Show the emotional shock settling in:
+- Grief
+- Numbness
+- Distance
+- Fragile attempts to cope
+
+The symbolic object takes on new meaning post-revelation. Begin to see the path forward, however difficult.`
   },
   climax_build_2: {
     title: "Final Preparations",
     wordCount: 850,
     phase: "Act 3 - Rising to Climax",
-    description: "Gathering strength and resources for the final confrontation",
-    requirements: `Write 800-900 words. The protagonist prepares for what must be done.
-- Concrete preparations for a final action or confrontation
-- Moments of reconnection with key allies
-- The protagonist accepts what they must sacrifice
-- The artifact is prepared or positioned for its final role
-- Quiet moments of resolution before the storm
-- Build anticipation for the climax`
+    description: "Preparing for the final confrontation",
+    requirements: `Write 800-900 words. Feels like walking toward fate.
+
+The protagonist prepares for the final confrontation. Include:
+- Packing symbolic objects
+- Writing letters
+- Quiet endings to relationships or conversations
+- Returning to meaningful places
+
+The symbolic object is prepared or positioned for its final role. Quiet moments of resolution before the storm.`
   },
   climax_build_3: {
     title: "Walking into the Storm",
     wordCount: 850,
     phase: "Act 3 - Rising to Climax",
-    description: "The march toward the final confrontation",
-    requirements: `Write 800-900 words. The protagonist moves toward their destiny.
-- Physical and emotional journey toward the climax
-- Moments of doubt and determination
-- Final words with key characters
-- The artifact accompanies them on this journey
-- Build tension and inevitability
-- End poised on the edge of the final scene`
+    description: "A slow, deliberate march toward the inevitable",
+    requirements: `Write 800-900 words. Every step feels final.
+
+A slow, deliberate march toward the inevitable. Show:
+- Rising tension
+- Long silences
+- Atmospheric heaviness
+- Destiny closing in
+
+The symbolic object accompanies them on this journey. End poised on the edge of the final scene.`
   },
   climax: {
     title: "The Climax",
     wordCount: 1100,
     phase: "Act 3 - Climax",
-    description: "The final confrontation - return to the scene from the Hook",
-    requirements: `Write 1000-1200 words. Return to the Hook scene with full context.
-- Recreate the opening scene, but now the reader understands everything
-- The protagonist faces their greatest challenge
-- Their character flaw is either overcome or defines their failure
-- The artifact plays its crucial final role
-- Maximum emotional intensity
-- All storylines converge in this moment
-- The outcome should feel both surprising and inevitable`
+    description: "Return to the Hook with full understanding, then move beyond",
+    requirements: `Write 1000-1200 words. This is the peak of the entire film.
+
+Return to the Hook - same visuals, same emotions - but now fully understood.
+
+Then move beyond it:
+- The true confrontation
+- Sacrifice, truth, forgiveness, or irreversible choice
+- Completion of the character's transformation
+
+The symbolic object plays its crucial final role.
+Maximum emotional intensity.
+All storylines converge in this moment.`
   },
   resolution_1: {
     title: "The Dust Settles",
     wordCount: 850,
     phase: "Resolution",
-    description: "Immediate aftermath of the climax",
-    requirements: `Write 800-900 words. Show the immediate aftermath.
-- The dust literally and metaphorically settles
-- Surviving characters process what happened
-- Consequences of the climax become clear
-- The artifact's final state reflects the story's outcome
-- Moments of grief, relief, or bittersweet victory
-- Begin to show the new normal emerging`
+    description: "The immediate aftermath - soft but heavy",
+    requirements: `Write 800-900 words. Soft but heavy.
+
+Show the immediate aftermath:
+- Quiet landscapes
+- Slower pacing
+- Consequences falling into place
+- Emotional weight settling over daily life
+
+The symbolic object's final state reflects the story's outcome. Moments of grief, relief, or bittersweet victory.`
   },
   resolution_2: {
     title: "The Final Reflection",
     wordCount: 650,
     phase: "Resolution",
-    description: "Poetic closing that echoes the beginning",
-    requirements: `Write 600-700 words. A quiet, reflective ending.
-- Mirror imagery or scenes from the opening chapters
-- Show how the protagonist has changed
-- The artifact in its final resting place or context
-- Leave some questions for the reader to ponder
-- End on an image or moment that encapsulates the journey
-- Create a sense of completion but not perfect closure`
+    description: "A reflective, poetic, mature closing scene",
+    requirements: `Write 600-700 words. The story ends, but the emotional resonance continues.
+
+End with a reflective, poetic, mature scene. It must:
+- Echo the Hook
+- Show transformation
+- Leave either a lingering ache or soft hope
+- Close with a symbolic final image
+
+The symbolic object in its final resting place. Create a sense of completion but not perfect closure.`
   }
 };
 
-// Hollywood screenplay base writing style requirements
+// Hollywood screenplay mandatory writing techniques
 const HOLLYWOOD_STYLE_REQUIREMENTS = `
-WRITING STYLE REQUIREMENTS:
+⭐ MANDATORY WRITING TECHNIQUES:
+
+TONE:
+- Cinematic
+- Mature
+- Slow-burn
+- Emotional
+- Reflective
+- No slang, no jargon
+
+SCENE CRAFTING (Every chapter must utilize):
+- Lighting
+- Sound
+- Textures
+- Weather
+- Shadows
+- Body language
+- Symbolic objects
+- Nostalgia
+- Subtle emotional cues
+
+DIALOGUE:
+- Minimalistic
+- Heavy subtext
+- Shaped by age, wisdom, and lived experience
+
+THEMATIC CONSISTENCY:
+- Themes of memory, loss, legacy, and transformation must appear subtly throughout
+
+STRICT SYMBOLISM RULE:
+- Each chapter must feature one significant symbolic object that ties into the emotional arc
+
+TECHNICAL RULES:
 - Write in third-person limited perspective
-- Use mature, literary prose - no slang or modern jargon
-- Create slow-burn, atmospheric tension
 - Use "." for pauses, never use "..."
-- Include rich sensory details: sight, sound, smell, touch, taste
 - Show emotions through physical sensations and actions
-- Dialogue should feel natural but purposeful
-- Every scene should advance character or plot
-- Maintain consistent tone throughout`;
+- Every scene must advance character or plot`;
 
 async function generateHollywoodChapter(
   filmTitle: string,
@@ -293,23 +385,41 @@ async function generateHollywoodChapter(
     throw new Error(`Unknown chapter type: ${chapterType}`);
   }
 
-  const systemPrompt = `You are an award-winning screenwriter crafting a Hollywood-quality screenplay. You write with the depth of literary fiction and the pacing of cinema. Always respond with valid JSON only, no additional text or markdown.`;
+  const systemPrompt = `You are an award-winning Hollywood screenwriter crafting a cinematic masterpiece. Your writing style is:
+- Cinematic, mature, slow-burn, emotional, and reflective
+- No slang or modern jargon
+- Rich in sensory detail: lighting, sound, textures, weather, shadows
+- Heavy on body language and subtle emotional cues
+- Minimalistic dialogue with deep subtext
+
+You write with the depth of literary fiction and the pacing of cinema. Every scene must feel like it could be filmed.
+
+CRITICAL: Always respond with valid JSON only. No additional text, no markdown, no code blocks. Pure JSON.`;
 
   const previousContext = previousChapters.length > 0
     ? `\n\nPREVIOUS CHAPTERS FOR CONTINUITY:\n${previousChapters.map((c, i) => 
-        `Chapter ${i + 1} (${c.chapterType}): "${c.title}"\nArtifact: ${c.artifact?.name || 'N/A'}\nSummary excerpt: ${c.summary.substring(0, 300)}...`
+        `Chapter ${i + 1} (${c.chapterType}): "${c.title}"\nSymbolic Object: ${c.artifact?.name || 'N/A'}\nSummary excerpt: ${c.summary.substring(0, 400)}...`
       ).join('\n\n')}`
     : '';
 
   const hookReference = hookContent && chapterType === 'climax'
-    ? `\n\nHOOK SCENE TO RECREATE WITH FULL CONTEXT:\n${hookContent}\n\nThis climax must return to this scene. The reader now understands what led here.`
+    ? `\n\n⚠️ CRITICAL - HOOK SCENE TO RECREATE WITH FULL CONTEXT:\n${hookContent}\n\nThis climax MUST return to this exact scene - same visuals, same emotions - but now fully understood. Then move beyond it.`
     : '';
 
-  const artifactGuidance = chapterNumber === 1
-    ? 'Create a meaningful symbolic artifact that will recur throughout the story. It should be a physical object with emotional resonance.'
-    : 'Reference the recurring artifact established in earlier chapters. Show its evolving significance.';
+  const symbolicObjectGuidance = chapterNumber === 1
+    ? `SYMBOLIC OBJECT (STRICT REQUIREMENT):
+Create ONE significant symbolic object that will recur throughout the entire 18-chapter story.
+- It must be a physical object with deep emotional resonance
+- It should be broken or damaged in the Hook scene
+- It will evolve in meaning as the story progresses
+- Choose something intimate: a watch, a letter, a photograph, a ring, a key, etc.`
+    : `SYMBOLIC OBJECT (STRICT REQUIREMENT):
+Reference the recurring symbolic object established in Chapter 1: "${previousChapters[0]?.artifact?.name || 'the established object'}"
+- Show its evolving significance in this chapter
+- It must appear meaningfully, not just mentioned in passing
+- Its presence should carry emotional weight`;
 
-  const userPrompt = `Create ${config.title} (Chapter ${chapterNumber} of 18) for a Hollywood screenplay.
+  const userPrompt = `Create "${config.title}" (Chapter ${chapterNumber} of 18) for a Hollywood screenplay.
 
 FILM DETAILS:
 Title: "${filmTitle}"
@@ -324,13 +434,12 @@ ${hookReference}
 CHAPTER REQUIREMENTS:
 Phase: ${config.phase}
 Purpose: ${config.description}
-Target Word Count: ${config.wordCount} words
+Target Word Count: ${config.wordCount} words ${chapterType === 'hook' ? '(EXACTLY 150 - NOT 149, NOT 151)' : ''}${chapterType === 'plot_twist' ? '(EXACTLY 1,500 words)' : ''}
 
 SPECIFIC INSTRUCTIONS:
 ${config.requirements}
 
-ARTIFACT GUIDANCE:
-${artifactGuidance}
+${symbolicObjectGuidance}
 
 ${HOLLYWOOD_STYLE_REQUIREMENTS}
 
@@ -339,12 +448,12 @@ Generate a JSON response with this exact structure:
   "chapterNumber": ${chapterNumber},
   "chapterType": "${chapterType}",
   "title": "A compelling, evocative chapter title (3-6 words)",
-  "summary": "The full chapter narrative of exactly ${config.wordCount} words. Write the complete scene with dialogue, action, description, and emotional depth.",
-  "prompt": "A detailed visual prompt for AI video generation (80-120 words). Include: specific camera movements, lighting mood, character positions, key actions, environment details, color palette, and emotional atmosphere.",
+  "summary": "The full chapter narrative of EXACTLY ${config.wordCount} words. Write the complete scene with atmospheric description, body language, minimal dialogue with heavy subtext, and emotional depth. Include lighting, weather, textures, and shadows.",
+  "prompt": "A detailed visual prompt for AI video generation (80-120 words). Include: specific camera movements, lighting mood, character positions, key actions, environment details, color palette, weather, and emotional atmosphere. Make it cinematically rich.",
   "artifact": {
-    "name": "The artifact's name",
-    "description": "Physical description of the artifact",
-    "significance": "What it symbolizes or represents in this chapter"
+    "name": "The symbolic object's name",
+    "description": "Physical description of the symbolic object",
+    "significance": "What it represents emotionally in this chapter and how it connects to the overall arc"
   }
 }`;
 

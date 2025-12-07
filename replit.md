@@ -2,7 +2,44 @@
 
 ## Overview
 
-FilmAI is a web application that generates cinematic films from a single title input using AI. The system creates complete story frameworks, generates chapters, converts them into AI-generated videos, and merges them into full film sequences. Users can create films in three modes: Cinematic Film Mode (full movie-like storyline), Short Film Mode (5-part compact narrative), and Storyboard Mode (shot-by-shot frames with prompts).
+FilmAI is a web application that generates cinematic films from a single title input using AI. The system creates complete story frameworks, generates chapters, converts them into AI-generated videos, and merges them into full film sequences.
+
+### Film Modes
+
+**Short Film Mode (5 chapters, ~500 words each)**
+- Quick, compact narrative structure
+- Standard story arc with beginning, middle, and end
+
+**Hollywood Screenplay Mode (18 chapters, ~15,000 words total)**
+- Professional Hollywood-quality screenplay structure
+- Each chapter has a specific narrative purpose and word count requirement
+- Features a recurring symbolic object that evolves throughout the story
+- Chapter structure:
+  1. The Shattering Moment (Hook) - 150 words EXACTLY
+  2. Before the Fall (Introduction I) - 850 words
+  3. Quiet Routines & Hidden Cracks (Introduction II) - 850 words
+  4. The Life They Thought They Had (Introduction III) - 850 words
+  5. The First Disturbance (Inciting Incident) - 850 words
+  6. Shockwaves (Early Development I) - 850 words
+  7. Attempts to Restore Control (Early Development II) - 850 words
+  8. Complications & Subplots (Early Development III) - 850 words
+  9. The Deepening Storm (Middle Development I) - 850 words
+  10. Truths Rising from the Past (Middle Development II) - 850 words
+  11. The Breaking Point (Middle Development III) - 850 words
+  12. The Plot Twist - 1,500 words EXACTLY
+  13. Aftermath of the Truth (Climax Build-up I) - 850 words
+  14. Final Preparations (Climax Build-up II) - 850 words
+  15. Walking into the Storm (Climax Build-up III) - 850 words
+  16. The Climax - 1,100 words
+  17. The Dust Settles (Resolution I) - 850 words
+  18. The Final Reflection (Resolution II) - 650 words
+
+**Mandatory Writing Techniques:**
+- Cinematic, mature, slow-burn, emotional, reflective tone
+- Rich sensory detail (lighting, sound, textures, weather, shadows, body language)
+- Minimalistic dialogue with heavy subtext
+- Themes of memory, loss, legacy, and transformation
+- One significant symbolic object per chapter that ties into the emotional arc
 
 ## User Preferences
 

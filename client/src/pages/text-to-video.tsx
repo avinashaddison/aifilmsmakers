@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Video, Sparkles, Download, Loader2, Music, Image } from "lucide-react";
+import { Video, Sparkles, Download, Loader2, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface VideoResult {
@@ -18,16 +18,15 @@ interface VideoResult {
 }
 
 const AVAILABLE_MODELS = [
-  { value: "sora-2", label: "Sora 2", resolution: "1080p", duration: "10s", tier: "free" },
+  { value: "kling_21", label: "Kling 2.1", resolution: "1080p", duration: "5-10s", tier: "free" },
+  { value: "kling_25", label: "Kling 2.5 Pro", resolution: "1080p", duration: "5-10s", tier: "premium" },
   { value: "higgsfield_v1", label: "Higgsfield", resolution: "1080p", duration: "5-15s", tier: "free" },
-  { value: "kling_25", label: "Kling 2.5", resolution: "1080p", duration: "5-10s", tier: "free" },
-  { value: "nanobanana-video", label: "Nano Banana", resolution: "720p", duration: "5-10s", tier: "free" },
-  { value: "ltxv-2", label: "LTV Video 2", resolution: "4K", duration: "6-10s", tier: "free" },
-  { value: "ltxv-13b", label: "LTX-Video 13B", resolution: "480p", duration: "1-60s", tier: "free" },
   { value: "seedance", label: "Seedance", resolution: "1080p", duration: "5-10s", tier: "free" },
-  { value: "wan-25", label: "Wan 2.5", resolution: "1080p", duration: "5-10s", tier: "free" },
-  { value: "veo_3", label: "Veo 3 Fast", resolution: "1080p", duration: "8s", tier: "premium" },
-  { value: "veo-31", label: "Veo 3.1 Fast", resolution: "1080p", duration: "8s", tier: "premium" },
+  { value: "ltxv-13b", label: "LTX-Video 13B", resolution: "480p", duration: "5-30s", tier: "free" },
+  { value: "veo_3", label: "Veo 3", resolution: "1080p", duration: "8s", tier: "premium" },
+  { value: "veo_31", label: "Veo 3.1", resolution: "1080p", duration: "8s", tier: "premium" },
+  { value: "hailuo_2", label: "Hailuo 2", resolution: "1080p", duration: "5-10s", tier: "premium" },
+  { value: "sora_2", label: "Sora 2", resolution: "1080p", duration: "10s", tier: "premium" },
 ];
 
 const ASPECT_RATIOS = [
@@ -49,10 +48,8 @@ export default function TextToVideo() {
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("10");
   const [resolution, setResolution] = useState("1080p");
-  const [model, setModel] = useState("sora-2");
+  const [model, setModel] = useState("kling_21");
   const [aspectRatio, setAspectRatio] = useState("16:9");
-  const [addAudio, setAddAudio] = useState(false);
-  const [audioPrompt, setAudioPrompt] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
@@ -80,12 +77,7 @@ export default function TextToVideo() {
         resolution,
         model,
         aspect_ratio: aspectRatio,
-        add_audio: addAudio,
       };
-
-      if (addAudio && audioPrompt.trim()) {
-        requestBody.audio_prompt = audioPrompt.trim();
-      }
 
       if (imageUrl.trim()) {
         requestBody.image_url = imageUrl.trim();
@@ -296,37 +288,6 @@ export default function TextToVideo() {
               />
               <p className="text-xs text-muted-foreground">Provide an image URL to generate video from that image</p>
             </div>
-          </GlassCard>
-
-          <GlassCard className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <Music className="w-4 h-4 text-orange-400" />
-                </div>
-                <h3 className="font-display text-lg font-bold text-white">AI Audio Enhancement</h3>
-              </div>
-              <Switch
-                checked={addAudio}
-                onCheckedChange={setAddAudio}
-                data-testid="switch-audio"
-              />
-            </div>
-            
-            {addAudio && (
-              <div className="space-y-2 animate-in fade-in duration-300">
-                <Label htmlFor="audioPrompt" className="text-white/80 text-sm">Audio Description (Optional)</Label>
-                <Input
-                  id="audioPrompt"
-                  placeholder="e.g., Dramatic orchestral music with nature sounds"
-                  value={audioPrompt}
-                  onChange={(e) => setAudioPrompt(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
-                  data-testid="input-audio-prompt"
-                />
-                <p className="text-xs text-muted-foreground">AI will generate synchronized sound effects for your video</p>
-              </div>
-            )}
           </GlassCard>
 
           <Button 

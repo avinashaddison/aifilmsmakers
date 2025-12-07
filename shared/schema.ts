@@ -21,11 +21,15 @@ export const STORY_LENGTHS = [
 ] as const;
 
 export const VIDEO_MODELS = [
-  "sora-2",
-  "minimax-video-01",
-  "veo-2",
-  "kling-video",
-  "runway-gen-3"
+  "kling_21",
+  "kling_25",
+  "higgsfield_v1",
+  "seedance",
+  "ltxv-13b",
+  "veo_3",
+  "veo_31",
+  "hailuo_2",
+  "sora_2"
 ] as const;
 
 export const FRAME_SIZES = [
@@ -55,7 +59,7 @@ export const films = pgTable("films", {
   storyLength: text("story_length").default("medium"),
   chapterCount: integer("chapter_count").default(5),
   wordsPerChapter: integer("words_per_chapter").default(500),
-  videoModel: text("video_model").default("sora-2"),
+  videoModel: text("video_model").default("kling_21"),
   frameSize: text("frame_size").default("1080p"),
   finalVideoUrl: text("final_video_url"),
   finalVideoPath: text("final_video_path"),
@@ -155,7 +159,7 @@ export const generatedVideos = pgTable("generated_videos", {
   status: text("status").notNull().default("processing"), // processing, completed, failed
   duration: integer("duration").notNull().default(10),
   resolution: text("resolution").notNull().default("1080p"),
-  model: text("model").notNull().default("sora-2"),
+  model: text("model").notNull().default("kling_21"),
   externalId: text("external_id"), // ID from VideogenAPI
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

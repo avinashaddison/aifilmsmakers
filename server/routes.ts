@@ -599,11 +599,10 @@ export async function registerRoutes(
         prompt, 
         duration = 10, 
         resolution = "1080p",
-        model = "sora-2",
+        model = "kling_21",
         aspect_ratio = "16:9",
-        add_audio = false,
-        audio_prompt,
-        image_url
+        image_url,
+        seed
       } = req.body;
 
       if (!prompt || typeof prompt !== "string") {
@@ -625,7 +624,7 @@ export async function registerRoutes(
         status: "processing"
       });
 
-      // Build request body
+      // Build request body according to VideogenAPI documentation
       const requestBody: any = {
         model,
         prompt,
@@ -635,15 +634,12 @@ export async function registerRoutes(
       };
 
       // Add optional parameters
-      if (add_audio) {
-        requestBody.add_audio = true;
-        if (audio_prompt) {
-          requestBody.audio_prompt = audio_prompt;
-        }
-      }
-
       if (image_url) {
         requestBody.image_url = image_url;
+      }
+
+      if (seed) {
+        requestBody.seed = parseInt(seed);
       }
 
       const response = await fetch("https://videogenapi.com/api/v1/generate", {
@@ -1060,7 +1056,7 @@ async function runFilmGenerationPipeline(filmId: string) {
             "Authorization": `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: film.videoModel || "sora-2",
+            model: film.videoModel || "kling_21",
             prompt: frame.prompt,
             duration: 10,
             resolution: film.frameSize || "1080p",

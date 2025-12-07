@@ -33,11 +33,15 @@ const STORY_LENGTH_LABELS: Record<string, { label: string; range: string }> = {
 };
 
 const VIDEO_MODEL_LABELS: Record<string, { label: string; quality: string }> = {
-  "sora-2": { label: "Sora 2", quality: "Ultra HD" },
-  "minimax-video-01": { label: "Minimax Video", quality: "High Quality" },
-  "veo-2": { label: "Veo 2", quality: "Premium" },
-  "kling-video": { label: "Kling Video", quality: "Fast" },
-  "runway-gen-3": { label: "Runway Gen-3", quality: "Creative" }
+  "kling_21": { label: "Kling 2.1", quality: "Free - Fast" },
+  "kling_25": { label: "Kling 2.5 Pro", quality: "Premium - Cinematic" },
+  "higgsfield_v1": { label: "Higgsfield", quality: "Free - Photorealistic" },
+  "seedance": { label: "Seedance", quality: "Free - Lightning Fast" },
+  "ltxv-13b": { label: "LTX-Video 13B", quality: "Free" },
+  "veo_3": { label: "Veo 3", quality: "Premium - Highest Quality" },
+  "veo_31": { label: "Veo 3.1", quality: "Premium - Latest" },
+  "hailuo_2": { label: "Hailuo 2", quality: "Premium" },
+  "sora_2": { label: "Sora 2", quality: "Premium - Audio & Dialogue" }
 };
 
 const FRAME_SIZE_LABELS: Record<string, { label: string; resolution: string }> = {
@@ -57,7 +61,7 @@ export default function CreateFilm() {
   const [storyLength, setStoryLength] = useState("medium");
   const [chapterCount, setChapterCount] = useState(5);
   const [wordsPerChapter, setWordsPerChapter] = useState(500);
-  const [videoModel, setVideoModel] = useState("sora-2");
+  const [videoModel, setVideoModel] = useState("kling_21");
   const [frameSize, setFrameSize] = useState("1080p");
   
   const [, setLocation] = useLocation();

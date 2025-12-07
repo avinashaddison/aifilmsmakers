@@ -6,9 +6,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Film, Mic, Hash, Video, BookOpen, Monitor, Check } from "lucide-react";
+import { Loader2, Sparkles, Film, Mic, Hash, Video, BookOpen, Monitor, Check, Clapperboard, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { NARRATOR_VOICES, VIDEO_MODELS, FRAME_SIZES } from "@shared/schema";
+import { NARRATOR_VOICES, VIDEO_MODELS, FRAME_SIZES, FILM_MODES, type FilmMode } from "@shared/schema";
+
+const FILM_MODE_INFO: Record<FilmMode, { label: string; description: string; chapters: number; words: number }> = {
+  "short_film": { 
+    label: "Short Film", 
+    description: "A compact 5-chapter narrative with quick pacing. Perfect for testing ideas or creating short content.",
+    chapters: 5,
+    words: 500
+  },
+  "hollywood_screenplay": { 
+    label: "Hollywood Screenplay", 
+    description: "Full 18-chapter cinematic structure following professional screenplay format. Includes Hook, Introduction, Development, Plot Twist, Climax, and Resolution phases.",
+    chapters: 18,
+    words: 800
+  }
+};
 
 const NARRATOR_VOICE_LABELS: Record<string, string> = {
   "male-narrator": "Male Narrator",
@@ -59,6 +74,7 @@ export default function CreateFilm() {
   const [currentGeneratingChapter, setCurrentGeneratingChapter] = useState(0);
   const [isGeneratingFilm, setIsGeneratingFilm] = useState(false);
   
+  const [filmMode, setFilmMode] = useState<FilmMode>("short_film");
   const [narratorVoice, setNarratorVoice] = useState("male-narrator");
   const [chapterCount, setChapterCount] = useState(5);
   const [wordsPerChapter, setWordsPerChapter] = useState(500);
@@ -67,6 +83,14 @@ export default function CreateFilm() {
   
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  const handleFilmModeChange = (mode: FilmMode) => {
+    setFilmMode(mode);
+    const modeInfo = FILM_MODE_INFO[mode];
+    setChapterCount(modeInfo.chapters);
+    setWordsPerChapter(modeInfo.words);
+    if (chapters.length > 0) setChapters([]);
+  };
 
   const handleGenerateFramework = async () => {
     if (!title || title.length < 3) return;
@@ -77,7 +101,7 @@ export default function CreateFilm() {
       const response = await fetch("/api/generate-framework", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title })
+        body: JSON.stringify({ title, filmMode })
       });
 
       if (!response.ok) throw new Error("Failed to generate framework");
@@ -111,6 +135,7 @@ export default function CreateFilm() {
         body: JSON.stringify({ 
           title, 
           framework,
+          filmMode,
           chapterCount,
           wordsPerChapter
         })
@@ -171,6 +196,7 @@ export default function CreateFilm() {
           title, 
           status: "generating",
           generationStage: "generating_videos",
+          filmMode,
           narratorVoice,
           storyLength: "custom",
           chapterCount: chapters.length,
@@ -200,6 +226,51 @@ export default function CreateFilm() {
         <h1 className="text-3xl font-bold text-foreground mb-2">Create Your Film</h1>
         <p className="text-muted-foreground">Enter a title and generate your story</p>
       </div>
+
+      <GlassCard className="p-6">
+        <Label className="text-sm font-medium mb-3 flex items-center gap-2">
+          <Clapperboard className="w-4 h-4 text-primary" /> Film Mode
+        </Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {FILM_MODES.map((mode) => {
+            const info = FILM_MODE_INFO[mode];
+            const isSelected = filmMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => handleFilmModeChange(mode)}
+                disabled={isGeneratingChapters || isGeneratingFramework}
+                data-testid={`button-mode-${mode}`}
+                className={`p-4 rounded-lg border-2 text-left transition-all ${
+                  isSelected 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-border hover:border-primary/50 bg-background/50'
+                } ${isGeneratingChapters || isGeneratingFramework ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {mode === 'short_film' ? (
+                    <FileText className={`w-5 h-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                  ) : (
+                    <Film className={`w-5 h-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                  )}
+                  <span className={`font-semibold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                    {info.label}
+                  </span>
+                  {isSelected && (
+                    <Check className="w-4 h-4 text-primary ml-auto" />
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {info.description}
+                </p>
+                <div className="text-xs text-muted-foreground">
+                  {info.chapters} chapters · ~{info.words} words each
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </GlassCard>
 
       <GlassCard className="p-6">
         <Label className="text-sm font-medium mb-2 flex items-center gap-2">
@@ -313,46 +384,61 @@ export default function CreateFilm() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 mt-4">
-              <div>
-                <Label className="text-sm flex items-center gap-2 mb-2">
-                  <Hash className="w-4 h-4 text-primary" /> Chapters: {chapterCount}
-                </Label>
-                <Slider
-                  value={[chapterCount]}
-                  onValueChange={(value) => {
-                    setChapterCount(value[0]);
-                    if (chapters.length > 0) setChapters([]);
-                  }}
-                  min={1}
-                  max={18}
-                  step={1}
-                  disabled={isGeneratingChapters}
-                  data-testid="slider-chapter-count"
-                />
-              </div>
+            {filmMode === "short_film" ? (
+              <div className="grid gap-4 md:grid-cols-2 mt-4">
+                <div>
+                  <Label className="text-sm flex items-center gap-2 mb-2">
+                    <Hash className="w-4 h-4 text-primary" /> Chapters: {chapterCount}
+                  </Label>
+                  <Slider
+                    value={[chapterCount]}
+                    onValueChange={(value) => {
+                      setChapterCount(value[0]);
+                      if (chapters.length > 0) setChapters([]);
+                    }}
+                    min={1}
+                    max={18}
+                    step={1}
+                    disabled={isGeneratingChapters}
+                    data-testid="slider-chapter-count"
+                  />
+                </div>
 
-              <div>
-                <Label className="text-sm flex items-center gap-2 mb-2">
-                  <BookOpen className="w-4 h-4 text-primary" /> Words/Chapter: {wordsPerChapter}
-                </Label>
-                <Slider
-                  value={[wordsPerChapter]}
-                  onValueChange={(value) => {
-                    setWordsPerChapter(value[0]);
-                    if (chapters.length > 0) setChapters([]);
-                  }}
-                  min={100}
-                  max={1000}
-                  step={50}
-                  disabled={isGeneratingChapters}
-                  data-testid="slider-words-per-chapter"
-                />
+                <div>
+                  <Label className="text-sm flex items-center gap-2 mb-2">
+                    <BookOpen className="w-4 h-4 text-primary" /> Words/Chapter: {wordsPerChapter}
+                  </Label>
+                  <Slider
+                    value={[wordsPerChapter]}
+                    onValueChange={(value) => {
+                      setWordsPerChapter(value[0]);
+                      if (chapters.length > 0) setChapters([]);
+                    }}
+                    min={100}
+                    max={1000}
+                    step={50}
+                    disabled={isGeneratingChapters}
+                    data-testid="slider-words-per-chapter"
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clapperboard className="w-4 h-4 text-primary" />
+                  <span className="font-medium text-foreground">Hollywood Screenplay Structure</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  18 chapters following professional screenplay format: Hook → Introduction (3) → Inciting Incident → Development (6) → Plot Twist → Climax Build (3) → Climax → Resolution (2)
+                </p>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Target: ~15,000-16,000 total words
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 text-sm text-muted-foreground">
-              {chapterCount} chapters × {wordsPerChapter} words = {(chapterCount * wordsPerChapter).toLocaleString()} total words
+              {chapterCount} chapters × ~{wordsPerChapter} words = ~{(chapterCount * wordsPerChapter).toLocaleString()} total words
             </div>
 
             {chapters.length === 0 && (

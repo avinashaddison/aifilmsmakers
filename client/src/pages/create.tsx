@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Zap, Film, Mic, Clock, Hash, Video, BookOpen, Monitor } from "lucide-react";
+import { Loader2, Sparkles, Zap, Film, Mic, Hash, Video, BookOpen, Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { NARRATOR_VOICES, STORY_LENGTHS, VIDEO_MODELS, FRAME_SIZES } from "@shared/schema";
+import { NARRATOR_VOICES, VIDEO_MODELS, FRAME_SIZES } from "@shared/schema";
 
 const NARRATOR_VOICE_LABELS: Record<string, string> = {
   "male-narrator": "Male Narrator",
@@ -17,13 +17,6 @@ const NARRATOR_VOICE_LABELS: Record<string, string> = {
   "dramatic-female": "Dramatic Female",
   "neutral": "Neutral Voice",
   "documentary": "Documentary Style"
-};
-
-const STORY_LENGTH_LABELS: Record<string, { label: string; range: string }> = {
-  "short": { label: "Short Film", range: "3-5 chapters" },
-  "medium": { label: "Medium Film", range: "6-12 chapters" },
-  "long": { label: "Feature Film", range: "13-18 chapters" },
-  "custom": { label: "Custom", range: "Set your own" }
 };
 
 const VIDEO_MODEL_LABELS: Record<string, { label: string; quality: string }> = {
@@ -49,7 +42,6 @@ export default function CreateFilm() {
   const [title, setTitle] = useState("");
   
   const [narratorVoice, setNarratorVoice] = useState("male-narrator");
-  const [storyLength, setStoryLength] = useState("medium");
   const [chapterCount, setChapterCount] = useState(5);
   const [wordsPerChapter, setWordsPerChapter] = useState(500);
   const [videoModel, setVideoModel] = useState("kling_21");
@@ -71,7 +63,7 @@ export default function CreateFilm() {
           status: "generating",
           generationStage: "generating_chapters",
           narratorVoice,
-          storyLength,
+          storyLength: "custom",
           chapterCount,
           wordsPerChapter,
           videoModel,
@@ -99,22 +91,6 @@ export default function CreateFilm() {
         description: error instanceof Error ? error.message : "Failed to create film"
       });
       setIsGenerating(false);
-    }
-  };
-
-  const getChapterCountForLength = (length: string): number => {
-    switch (length) {
-      case "short": return 5;
-      case "medium": return 8;
-      case "long": return 18;
-      default: return chapterCount;
-    }
-  };
-
-  const handleStoryLengthChange = (value: string) => {
-    setStoryLength(value);
-    if (value !== "custom") {
-      setChapterCount(getChapterCountForLength(value));
     }
   };
 
@@ -215,37 +191,13 @@ export default function CreateFilm() {
 
           <GlassCard className="p-5">
             <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" /> Story Length
-            </h3>
-            <Select value={storyLength} onValueChange={handleStoryLengthChange}>
-              <SelectTrigger className="w-full bg-black/40 border-white/10" data-testid="select-story-length">
-                <SelectValue placeholder="Select length" />
-              </SelectTrigger>
-              <SelectContent>
-                {STORY_LENGTHS.map((length) => (
-                  <SelectItem key={length} value={length}>
-                    <div className="flex items-center justify-between w-full gap-4">
-                      <span>{STORY_LENGTH_LABELS[length].label}</span>
-                      <span className="text-xs text-muted-foreground">{STORY_LENGTH_LABELS[length].range}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </GlassCard>
-
-          <GlassCard className="p-5">
-            <h3 className="font-display text-base font-bold text-white mb-3 flex items-center gap-2">
               <Hash className="w-4 h-4 text-secondary" /> Chapters
               <span className="ml-auto text-xl font-bold text-primary">{chapterCount}</span>
             </h3>
             <div className="space-y-3">
               <Slider
                 value={[chapterCount]}
-                onValueChange={(value) => {
-                  setChapterCount(value[0]);
-                  setStoryLength("custom");
-                }}
+                onValueChange={(value) => setChapterCount(value[0])}
                 min={1}
                 max={18}
                 step={1}

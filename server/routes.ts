@@ -3,14 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } from "@shared/schema";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import Replicate from "replicate";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -50,9 +44,11 @@ Make it cinematic, emotionally engaging, and suitable for video adaptation.`;
 }
 
 async function generateStoryFramework(filmTitle: string) {
-  const prompt = `You are a professional film writer. Create a complete story framework for a film titled "${filmTitle}".
+  const systemPrompt = "You are a professional film writer who creates compelling cinematic stories. Always respond with valid JSON only, no additional text or markdown.";
+  
+  const userPrompt = `Create a complete story framework for a film titled "${filmTitle}".
 
-Generate a JSON response with the following structure:
+Generate a JSON response with the following structure (no markdown, just pure JSON):
 {
   "premise": "A 2-3 sentence premise of the film",
   "hook": "A compelling opening hook (1-2 sentences)",
@@ -77,18 +73,18 @@ Generate a JSON response with the following structure:
 
 Make it cinematic, compelling, and suitable for video generation. Include 3-5 main characters.`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("anthropic/claude-4-sonnet", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+    },
+  })) {
+    fullResponse += event.toString();
   }
 
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Could not parse JSON from Claude response");
   }
@@ -97,7 +93,9 @@ Make it cinematic, compelling, and suitable for video generation. Include 3-5 ma
 }
 
 async function generateChapters(filmTitle: string, framework: any, numberOfChapters: number = 5, wordsPerChapter: number = 500) {
-  const prompt = `You are a professional film writer. Based on the following film framework, create ${numberOfChapters} chapters that tell a complete story.
+  const systemPrompt = "You are a professional film writer who creates compelling cinematic stories. Always respond with valid JSON only, no additional text or markdown.";
+  
+  const userPrompt = `Based on the following film framework, create ${numberOfChapters} chapters that tell a complete story.
 
 Film Title: ${filmTitle}
 Premise: ${framework.premise}
@@ -105,7 +103,7 @@ Genre: ${framework.genre}
 Tone: ${framework.tone}
 Characters: ${framework.characters.map((c: any) => `${c.name} (${c.role})`).join(", ")}
 
-Generate a JSON array of ${numberOfChapters} chapters with this structure:
+Generate a JSON array of ${numberOfChapters} chapters with this structure (no markdown, just pure JSON):
 [
   {
     "chapterNumber": 1,
@@ -119,19 +117,18 @@ IMPORTANT: Each chapter summary must be approximately ${wordsPerChapter} words l
 
 Ensure the chapters flow naturally, build tension, and create a complete narrative arc with beginning, middle, and end.`;
 
-  const maxTokens = Math.max(4000, numberOfChapters * wordsPerChapter * 2);
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: Math.min(maxTokens, 16000),
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("anthropic/claude-4-sonnet", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+    },
+  })) {
+    fullResponse += event.toString();
   }
 
-  const jsonMatch = content.text.match(/\[[\s\S]*\]/);
+  const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error("Could not parse JSON from Claude response");
   }

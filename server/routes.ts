@@ -145,6 +145,69 @@ Ensure the chapters flow naturally, build tension, and create a complete narrati
   return JSON.parse(jsonMatch[0]);
 }
 
+async function generateSingleChapter(
+  filmTitle: string, 
+  framework: any, 
+  chapterNumber: number, 
+  totalChapters: number, 
+  wordsPerChapter: number,
+  previousChapters: Array<{title: string; summary: string}>
+) {
+  const systemPrompt = "You are a professional film writer who creates compelling cinematic stories. Always respond with valid JSON only, no additional text or markdown.";
+  
+  const previousContext = previousChapters.length > 0 
+    ? `\n\nPrevious chapters for context:\n${previousChapters.map((c, i) => `Chapter ${i+1}: ${c.title} - ${c.summary.substring(0, 200)}...`).join('\n')}`
+    : '';
+  
+  const positionHint = chapterNumber === 1 
+    ? "This is the OPENING chapter - establish the world, introduce the protagonist, and set up the initial situation."
+    : chapterNumber === totalChapters 
+    ? "This is the FINAL chapter - bring the story to a satisfying conclusion, resolve conflicts, and deliver emotional payoff."
+    : chapterNumber <= Math.floor(totalChapters / 3)
+    ? "This is an early chapter - continue building the world and deepen character development."
+    : chapterNumber <= Math.floor(2 * totalChapters / 3)
+    ? "This is a middle chapter - escalate conflicts, raise stakes, and drive the story forward."
+    : "This is a late chapter - build toward the climax with increasing tension.";
+  
+  const userPrompt = `Based on the following film framework, create chapter ${chapterNumber} of ${totalChapters}.
+
+Film Title: ${filmTitle}
+Premise: ${framework.premise}
+Genres: ${Array.isArray(framework.genres) ? framework.genres.join(', ') : framework.genre}
+Hook: ${framework.hook}
+${previousContext}
+
+${positionHint}
+
+Generate a JSON object for this single chapter (no markdown, just pure JSON):
+{
+  "chapterNumber": ${chapterNumber},
+  "title": "A compelling chapter title",
+  "summary": "A detailed narrative of approximately ${wordsPerChapter} words describing what happens in this chapter. Include vivid descriptions, character emotions, dialogue snippets, and scene details.",
+  "prompt": "Detailed visual description for video generation (50-100 words). Include: camera angles, lighting, action, mood, characters visible, environment details. Be specific and cinematic."
+}
+
+IMPORTANT: The summary must be approximately ${wordsPerChapter} words. Make it rich, cinematic, and emotionally engaging.`;
+
+  let fullResponse = "";
+  
+  for await (const event of replicate.stream("anthropic/claude-4-sonnet", {
+    input: {
+      prompt: userPrompt,
+      system_prompt: systemPrompt,
+    },
+  })) {
+    fullResponse += event.toString();
+  }
+
+  const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Could not parse JSON from Claude response for chapter " + chapterNumber);
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
+
 async function generateScenePrompts(chapterSummary: string, chapterTitle: string, numberOfScenes: number = 3) {
   const systemPrompt = "You are a professional video director who creates detailed scene prompts for AI video generation. Always respond with valid JSON only, no additional text.";
   
@@ -413,6 +476,60 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating framework:", error);
       res.status(500).json({ error: "Failed to generate framework" });
+    }
+  });
+
+  app.post("/api/generate-chapters-stream", async (req, res) => {
+    try {
+      const { title, framework, chapterCount, wordsPerChapter } = req.body;
+      
+      if (!title || !framework) {
+        res.status(400).json({ error: "Title and framework are required" });
+        return;
+      }
+      
+      const totalChapters = chapterCount || 5;
+      const words = wordsPerChapter || 500;
+      
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+      
+      const previousChapters: Array<{title: string; summary: string}> = [];
+      
+      for (let i = 1; i <= totalChapters; i++) {
+        try {
+          res.write(`data: ${JSON.stringify({ type: 'generating', chapterNumber: i, totalChapters })}\n\n`);
+          
+          const chapter = await generateSingleChapter(
+            title,
+            framework,
+            i,
+            totalChapters,
+            words,
+            previousChapters
+          );
+          
+          previousChapters.push({ title: chapter.title, summary: chapter.summary });
+          
+          res.write(`data: ${JSON.stringify({ type: 'chapter', chapter })}\n\n`);
+        } catch (chapterError) {
+          console.error(`Error generating chapter ${i}:`, chapterError);
+          res.write(`data: ${JSON.stringify({ type: 'error', chapterNumber: i, error: 'Failed to generate chapter' })}\n\n`);
+        }
+      }
+      
+      res.write(`data: ${JSON.stringify({ type: 'complete', totalChapters })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Error in chapter streaming:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to generate chapters" });
+      } else {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'Stream failed' })}\n\n`);
+        res.end();
+      }
     }
   });
 

@@ -4,13 +4,14 @@ import { Play, GripVertical, Scissors, Trash2, Download, Loader2 } from "lucide-
 import { Link, useRoute } from "wouter";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Assembly() {
   const [, params] = useRoute("/assembly/:filmId");
   const filmId = params?.filmId ? parseInt(params.filmId) : null;
   const [chapters, setChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!filmId) return;
@@ -24,14 +25,14 @@ export default function Assembly() {
         setChapters(data);
       } catch (error) {
         console.error("Error fetching chapters:", error);
-        toast.error("Failed to load chapters");
+        toast({ variant: "destructive", title: "Failed to load chapters" });
       } finally {
         setLoading(false);
       }
     };
 
     fetchChapters();
-  }, [filmId]);
+  }, [filmId, toast]);
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col animate-in fade-in duration-700">
        <div className="flex items-center justify-between mb-6 shrink-0">

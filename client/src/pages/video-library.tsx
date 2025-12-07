@@ -3,7 +3,6 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Video, Download, Play, Clock, Loader2, Film, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 
 interface VideoData {
   id: string;
@@ -307,7 +306,7 @@ export default function VideoLibrary() {
                       </div>
                       
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(video.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                        {new Date(video.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                   </GlassCard>

@@ -4,6 +4,8 @@ import {
   storyFrameworks, 
   chapters,
   generatedVideos,
+  scenes,
+  generationJobs,
   type InsertFilm, 
   type Film,
   type InsertStoryFramework,
@@ -11,9 +13,13 @@ import {
   type InsertChapter,
   type Chapter,
   type InsertGeneratedVideo,
-  type GeneratedVideo
+  type GeneratedVideo,
+  type InsertScene,
+  type Scene,
+  type InsertGenerationJob,
+  type GenerationJob
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   // Films
@@ -38,6 +44,19 @@ export interface IStorage {
   getGeneratedVideo(id: string): Promise<GeneratedVideo | undefined>;
   listGeneratedVideos(): Promise<GeneratedVideo[]>;
   updateGeneratedVideo(id: string, updates: Partial<InsertGeneratedVideo>): Promise<GeneratedVideo | undefined>;
+  
+  // Scenes
+  createScene(scene: InsertScene): Promise<Scene>;
+  getScenesByChapterId(chapterId: string): Promise<Scene[]>;
+  getScenesByFilmId(filmId: string): Promise<Scene[]>;
+  getScene(id: string): Promise<Scene | undefined>;
+  updateScene(id: string, updates: Partial<InsertScene>): Promise<Scene | undefined>;
+  deleteScenesByChapterId(chapterId: string): Promise<void>;
+  
+  // Generation Jobs
+  createGenerationJob(job: InsertGenerationJob): Promise<GenerationJob>;
+  getGenerationJobByFilmId(filmId: string): Promise<GenerationJob | undefined>;
+  updateGenerationJob(id: string, updates: Partial<InsertGenerationJob>): Promise<GenerationJob | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -138,6 +157,70 @@ export class DbStorage implements IStorage {
       .where(eq(generatedVideos.id, id))
       .returning();
     return video;
+  }
+
+  // Scenes
+  async createScene(insertScene: InsertScene): Promise<Scene> {
+    const [scene] = await db.insert(scenes).values(insertScene).returning();
+    return scene;
+  }
+
+  async getScenesByChapterId(chapterId: string): Promise<Scene[]> {
+    return await db
+      .select()
+      .from(scenes)
+      .where(eq(scenes.chapterId, chapterId))
+      .orderBy(scenes.sceneNumber);
+  }
+
+  async getScenesByFilmId(filmId: string): Promise<Scene[]> {
+    return await db
+      .select()
+      .from(scenes)
+      .where(eq(scenes.filmId, filmId))
+      .orderBy(scenes.sceneNumber);
+  }
+
+  async getScene(id: string): Promise<Scene | undefined> {
+    const [scene] = await db.select().from(scenes).where(eq(scenes.id, id));
+    return scene;
+  }
+
+  async updateScene(id: string, updates: Partial<InsertScene>): Promise<Scene | undefined> {
+    const [scene] = await db
+      .update(scenes)
+      .set(updates)
+      .where(eq(scenes.id, id))
+      .returning();
+    return scene;
+  }
+
+  async deleteScenesByChapterId(chapterId: string): Promise<void> {
+    await db.delete(scenes).where(eq(scenes.chapterId, chapterId));
+  }
+
+  // Generation Jobs
+  async createGenerationJob(insertJob: InsertGenerationJob): Promise<GenerationJob> {
+    const [job] = await db.insert(generationJobs).values(insertJob).returning();
+    return job;
+  }
+
+  async getGenerationJobByFilmId(filmId: string): Promise<GenerationJob | undefined> {
+    const [job] = await db
+      .select()
+      .from(generationJobs)
+      .where(eq(generationJobs.filmId, filmId))
+      .orderBy(desc(generationJobs.createdAt));
+    return job;
+  }
+
+  async updateGenerationJob(id: string, updates: Partial<InsertGenerationJob>): Promise<GenerationJob | undefined> {
+    const [job] = await db
+      .update(generationJobs)
+      .set(updates)
+      .where(eq(generationJobs.id, id))
+      .returning();
+    return job;
   }
 }
 

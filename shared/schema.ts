@@ -71,10 +71,23 @@ export const FRAME_SIZES = [
 export const GENERATION_STAGES = [
   "idle",
   "generating_chapters",
-  "generating_prompts",
+  "splitting_scenes",
+  "generating_audio",
   "generating_videos", 
-  "merging_chapters",
+  "assembling_scenes",
+  "assembling_chapters",
   "merging_final",
+  "completed",
+  "failed"
+] as const;
+
+export const SCENE_STATUSES = [
+  "pending",
+  "generating_video",
+  "video_complete",
+  "generating_audio",
+  "audio_complete",
+  "assembling",
   "completed",
   "failed"
 ] as const;
@@ -169,7 +182,12 @@ export const chapters = pgTable("chapters", {
     status: string;
     externalId?: string;
   }>>(),
-  status: text("status").notNull().default("pending"), // pending, generating_prompts, generating_videos, merging, completed, failed
+  status: text("status").notNull().default("pending"), // pending, splitting_scenes, generating_audio, generating_videos, assembling, completed, failed
+  totalScenes: integer("total_scenes").default(0),
+  completedScenes: integer("completed_scenes").default(0),
+  audioUrl: text("audio_url"), // Full chapter narration audio
+  audioObjectPath: text("audio_object_path"),
+  audioDuration: integer("audio_duration"), // Duration in seconds
   videoUrl: text("video_url"),
   objectPath: text("object_path"), // Path in object storage for merged chapter video
   duration: text("duration").default("00:45"),
@@ -208,3 +226,60 @@ export const insertGeneratedVideoSchema = createInsertSchema(generatedVideos).om
 });
 export type InsertGeneratedVideo = z.infer<typeof insertGeneratedVideoSchema>;
 export type GeneratedVideo = typeof generatedVideos.$inferSelect;
+
+// Scenes table - individual 10-20 second video segments within chapters
+export const scenes = pgTable("scenes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chapterId: varchar("chapter_id").notNull().references(() => chapters.id, { onDelete: "cascade" }),
+  filmId: varchar("film_id").notNull().references(() => films.id, { onDelete: "cascade" }),
+  sceneNumber: integer("scene_number").notNull(),
+  visualPrompt: text("visual_prompt").notNull(),
+  narrativeText: text("narrative_text"), // The text portion for this scene (for TTS)
+  mood: text("mood"),
+  cameraMovement: text("camera_movement"),
+  targetDuration: integer("target_duration").default(15), // seconds
+  actualDuration: integer("actual_duration"),
+  status: text("status").notNull().default("pending"),
+  videoUrl: text("video_url"),
+  videoObjectPath: text("video_object_path"),
+  audioUrl: text("audio_url"),
+  audioObjectPath: text("audio_object_path"),
+  assembledVideoUrl: text("assembled_video_url"),
+  assembledVideoPath: text("assembled_video_path"),
+  externalVideoId: text("external_video_id"), // VideogenAPI job ID
+  externalAudioId: text("external_audio_id"), // TTS job ID
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertSceneSchema = createInsertSchema(scenes).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertScene = z.infer<typeof insertSceneSchema>;
+export type Scene = typeof scenes.$inferSelect;
+export type SceneStatus = typeof SCENE_STATUSES[number];
+
+// Generation Jobs table - tracks overall film generation progress
+export const generationJobs = pgTable("generation_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  filmId: varchar("film_id").notNull().references(() => films.id, { onDelete: "cascade" }),
+  stage: text("stage").notNull().default("idle"),
+  totalChapters: integer("total_chapters").default(0),
+  completedChapters: integer("completed_chapters").default(0),
+  totalScenes: integer("total_scenes").default(0),
+  completedScenes: integer("completed_scenes").default(0),
+  currentChapter: integer("current_chapter"),
+  currentScene: integer("current_scene"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertGenerationJobSchema = createInsertSchema(generationJobs).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertGenerationJob = z.infer<typeof insertGenerationJobSchema>;
+export type GenerationJob = typeof generationJobs.$inferSelect;

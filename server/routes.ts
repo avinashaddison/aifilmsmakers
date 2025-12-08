@@ -1399,6 +1399,166 @@ async function generateFilmAudio(filmId: string): Promise<{
   return { totalScenes, successCount, failCount, errors };
 }
 
+// Generate videos for all scenes in a film
+async function generateFilmSceneVideos(filmId: string): Promise<{
+  totalScenes: number;
+  successCount: number;
+  failCount: number;
+  errors: string[];
+}> {
+  const film = await storage.getFilm(filmId);
+  if (!film) throw new Error("Film not found");
+
+  const chapters = await storage.getChaptersByFilmId(filmId);
+  if (chapters.length === 0) throw new Error("No chapters found");
+
+  const apiKey = process.env.VIDEOGEN_API_KEY;
+  if (!apiKey) throw new Error("VIDEOGEN_API_KEY not configured");
+
+  const model = film.videoModel || "kling_21";
+  const resolution = film.frameSize || "1080p";
+
+  let totalScenes = 0;
+  let successCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
+
+  // Update film stage
+  await storage.updateFilm(filmId, { generationStage: "generating_videos" });
+
+  for (const chapter of chapters) {
+    try {
+      console.log(`Generating videos for chapter ${chapter.chapterNumber}: ${chapter.title}`);
+      
+      await storage.updateChapter(chapter.id, { status: "generating_videos" });
+      
+      const scenes = await storage.getScenesByChapterId(chapter.id);
+      totalScenes += scenes.length;
+
+      for (const scene of scenes) {
+        // Skip scenes that already have video
+        if (scene.videoUrl || scene.status === "video_complete" || scene.status === "completed") {
+          console.log(`Scene ${scene.sceneNumber} already has video, skipping`);
+          successCount++;
+          continue;
+        }
+
+        if (!scene.visualPrompt || scene.visualPrompt.trim() === "") {
+          console.log(`Scene ${scene.sceneNumber} has no visual prompt, skipping`);
+          continue;
+        }
+
+        try {
+          console.log(`Starting video generation for chapter ${chapter.chapterNumber}, scene ${scene.sceneNumber}...`);
+          await storage.updateScene(scene.id, { status: "generating_video" });
+
+          const requestBody = {
+            model,
+            prompt: scene.visualPrompt,
+            duration: Math.min(scene.targetDuration || 15, 20),
+            resolution,
+            aspect_ratio: "16:9"
+          };
+
+          const response = await fetch("https://videogenapi.com/api/v1/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(requestBody)
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            const errorMsg = `VideogenAPI error for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${errorText}`;
+            console.error(errorMsg);
+            errors.push(errorMsg);
+            await storage.updateScene(scene.id, { 
+              status: "failed",
+              errorMessage: errorMsg
+            });
+            failCount++;
+            continue;
+          }
+
+          const result = await response.json();
+          const externalId = result.id || result.video_id || result.generation_id;
+
+          // Poll for completion
+          const pollResult = await pollVideoStatus(externalId, 120); // 10 minutes timeout
+
+          if (pollResult.videoUrl) {
+            // Upload to object storage
+            try {
+              const objectStorageService = new ObjectStorageService();
+              const objectPath = await objectStorageService.uploadVideoFromUrl(pollResult.videoUrl);
+
+              await storage.updateScene(scene.id, {
+                videoUrl: pollResult.videoUrl,
+                videoObjectPath: objectPath,
+                externalVideoId: externalId,
+                status: "video_complete"
+              });
+              successCount++;
+              console.log(`Chapter ${chapter.chapterNumber} scene ${scene.sceneNumber} video generated successfully`);
+            } catch (uploadError) {
+              console.error(`Failed to upload scene video:`, uploadError);
+              await storage.updateScene(scene.id, {
+                videoUrl: pollResult.videoUrl,
+                externalVideoId: externalId,
+                status: "video_complete"
+              });
+              successCount++;
+            }
+          } else {
+            const errorMsg = `Video generation ${pollResult.status} for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
+            errors.push(errorMsg);
+            await storage.updateScene(scene.id, {
+              status: "failed",
+              errorMessage: errorMsg
+            });
+            failCount++;
+          }
+        } catch (sceneError) {
+          const errorMsg = `Error generating video for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${sceneError}`;
+          console.error(errorMsg);
+          errors.push(errorMsg);
+          await storage.updateScene(scene.id, {
+            status: "failed",
+            errorMessage: errorMsg
+          });
+          failCount++;
+        }
+      }
+      
+      // Update chapter status based on scene results
+      const chapterScenes = await storage.getScenesByChapterId(chapter.id);
+      const completedScenes = chapterScenes.filter(s => s.status === "video_complete" || s.status === "completed").length;
+      const failedScenes = chapterScenes.filter(s => s.status === "failed").length;
+      
+      await storage.updateChapter(chapter.id, {
+        status: failedScenes > 0 && completedScenes === 0 ? "failed" : "videos_ready",
+        completedScenes,
+      });
+      
+    } catch (chapterError) {
+      const errorMsg = `Failed to process chapter ${chapter.chapterNumber}: ${chapterError}`;
+      console.error(errorMsg);
+      errors.push(errorMsg);
+      await storage.updateChapter(chapter.id, { status: "failed" });
+    }
+  }
+
+  // Update film stage based on results
+  await storage.updateFilm(filmId, {
+    generationStage: failCount === 0 ? "assembling_scenes" : (successCount > 0 ? "assembling_scenes" : "failed"),
+  });
+
+  console.log(`Film video generation complete: ${successCount} success, ${failCount} failed out of ${totalScenes} total scenes`);
+  return { totalScenes, successCount, failCount, errors };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -2007,6 +2167,444 @@ export async function registerRoutes(
       description: description.substring(0, 100) + "..."
     }));
     res.json(voices);
+  });
+
+  // ============================================
+  // Scene Video Generation using VideogenAPI
+  // ============================================
+
+  // Generate video for a single scene using VideogenAPI
+  app.post("/api/scenes/:id/generate-video", async (req, res) => {
+    try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        res.status(404).json({ error: "Scene not found" });
+        return;
+      }
+
+      if (!scene.visualPrompt || scene.visualPrompt.trim() === "") {
+        res.status(400).json({ error: "Scene has no visual prompt for video generation" });
+        return;
+      }
+
+      const apiKey = process.env.VIDEOGEN_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: "VIDEOGEN_API_KEY not configured" });
+        return;
+      }
+
+      // Get the film to determine video settings
+      const film = await storage.getFilm(scene.filmId);
+      const model = film?.videoModel || "kling_21";
+      const resolution = film?.frameSize || "1080p";
+      const duration = scene.targetDuration || 15;
+
+      await storage.updateScene(scene.id, { status: "generating_video" });
+
+      // Start video generation
+      const requestBody = {
+        model,
+        prompt: scene.visualPrompt,
+        duration: Math.min(duration, 20), // Cap at 20 seconds for API limits
+        resolution,
+        aspect_ratio: "16:9"
+      };
+
+      const response = await fetch("https://videogenapi.com/api/v1/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("VideogenAPI error for scene:", errorText);
+        await storage.updateScene(scene.id, { 
+          status: "failed",
+          errorMessage: `Video generation failed: ${errorText}`
+        });
+        res.status(500).json({ error: "Video generation failed", details: errorText });
+        return;
+      }
+
+      const result = await response.json();
+      const externalId = result.id || result.video_id || result.generation_id;
+
+      // Update scene with external ID for polling
+      await storage.updateScene(scene.id, {
+        externalVideoId: externalId,
+        status: "generating_video"
+      });
+
+      res.json({
+        sceneId: scene.id,
+        externalId,
+        status: "generating_video",
+        message: "Video generation started"
+      });
+    } catch (error) {
+      console.error("Scene video generation error:", error);
+      await storage.updateScene(req.params.id, { 
+        status: "failed",
+        errorMessage: `Video generation error: ${error}`
+      });
+      res.status(500).json({ error: "Failed to generate video" });
+    }
+  });
+
+  // Check video generation status for a scene
+  app.get("/api/scenes/:id/video-status", async (req, res) => {
+    try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        res.status(404).json({ error: "Scene not found" });
+        return;
+      }
+
+      // If already completed or failed, return current status
+      if (scene.status === "video_complete" || scene.status === "completed") {
+        res.json({
+          sceneId: scene.id,
+          status: scene.status,
+          videoUrl: scene.videoUrl,
+          videoObjectPath: scene.videoObjectPath
+        });
+        return;
+      }
+
+      if (scene.status === "failed") {
+        res.json({
+          sceneId: scene.id,
+          status: "failed",
+          errorMessage: scene.errorMessage
+        });
+        return;
+      }
+
+      // If we have an external ID, check status with VideogenAPI
+      if (scene.externalVideoId) {
+        const apiKey = process.env.VIDEOGEN_API_KEY;
+        if (!apiKey) {
+          res.status(500).json({ error: "VIDEOGEN_API_KEY not configured" });
+          return;
+        }
+
+        const response = await fetch(`https://videogenapi.com/api/v1/status/${scene.externalVideoId}`, {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const videoUrl = result.video_url || result.url;
+
+          if (videoUrl) {
+            // Upload video to object storage
+            try {
+              const objectStorageService = new ObjectStorageService();
+              const objectPath = await objectStorageService.uploadVideoFromUrl(videoUrl);
+
+              await storage.updateScene(scene.id, {
+                videoUrl: videoUrl,
+                videoObjectPath: objectPath,
+                status: "video_complete"
+              });
+
+              res.json({
+                sceneId: scene.id,
+                status: "video_complete",
+                videoUrl,
+                videoObjectPath: objectPath
+              });
+              return;
+            } catch (uploadError) {
+              console.error("Failed to upload scene video to object storage:", uploadError);
+              await storage.updateScene(scene.id, {
+                videoUrl,
+                status: "video_complete"
+              });
+              res.json({
+                sceneId: scene.id,
+                status: "video_complete",
+                videoUrl
+              });
+              return;
+            }
+          }
+
+          if (result.status === "failed" || result.status === "error") {
+            await storage.updateScene(scene.id, {
+              status: "failed",
+              errorMessage: result.message || "Video generation failed"
+            });
+            res.json({
+              sceneId: scene.id,
+              status: "failed",
+              errorMessage: result.message || "Video generation failed"
+            });
+            return;
+          }
+
+          // Still processing
+          res.json({
+            sceneId: scene.id,
+            status: "generating_video",
+            externalStatus: result.status || "processing"
+          });
+          return;
+        }
+      }
+
+      res.json({
+        sceneId: scene.id,
+        status: scene.status
+      });
+    } catch (error) {
+      console.error("Scene video status check error:", error);
+      res.status(500).json({ error: "Failed to check video status" });
+    }
+  });
+
+  // Generate videos for all scenes in a chapter
+  app.post("/api/chapters/:id/generate-videos", async (req, res) => {
+    try {
+      const chapter = await storage.getChapter(req.params.id);
+      if (!chapter) {
+        res.status(404).json({ error: "Chapter not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByChapterId(chapter.id);
+      if (scenes.length === 0) {
+        res.status(400).json({ 
+          error: "No scenes found. Please split chapter into scenes first." 
+        });
+        return;
+      }
+
+      const apiKey = process.env.VIDEOGEN_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: "VIDEOGEN_API_KEY not configured" });
+        return;
+      }
+
+      // Get film settings
+      const film = await storage.getFilm(chapter.filmId);
+      const model = film?.videoModel || "kling_21";
+      const resolution = film?.frameSize || "1080p";
+
+      await storage.updateChapter(chapter.id, { status: "generating_videos" });
+
+      // Return immediately and process in background
+      res.json({
+        chapterId: chapter.id,
+        message: "Video generation started for all scenes",
+        totalScenes: scenes.length
+      });
+
+      // Process video generation in background
+      (async () => {
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const scene of scenes) {
+          // Skip scenes that already have video
+          if (scene.videoUrl || scene.status === "video_complete" || scene.status === "completed") {
+            console.log(`Scene ${scene.sceneNumber} already has video, skipping`);
+            successCount++;
+            continue;
+          }
+
+          if (!scene.visualPrompt || scene.visualPrompt.trim() === "") {
+            console.log(`Scene ${scene.sceneNumber} has no visual prompt, skipping`);
+            continue;
+          }
+
+          try {
+            console.log(`Starting video generation for scene ${scene.sceneNumber}...`);
+            await storage.updateScene(scene.id, { status: "generating_video" });
+
+            const requestBody = {
+              model,
+              prompt: scene.visualPrompt,
+              duration: Math.min(scene.targetDuration || 15, 20),
+              resolution,
+              aspect_ratio: "16:9"
+            };
+
+            const response = await fetch("https://videogenapi.com/api/v1/generate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`VideogenAPI error for scene ${scene.sceneNumber}:`, errorText);
+              await storage.updateScene(scene.id, { 
+                status: "failed",
+                errorMessage: `Video generation failed: ${errorText}`
+              });
+              failCount++;
+              continue;
+            }
+
+            const result = await response.json();
+            const externalId = result.id || result.video_id || result.generation_id;
+
+            // Poll for completion
+            const pollResult = await pollVideoStatus(externalId, 120); // 10 minutes timeout
+
+            if (pollResult.videoUrl) {
+              // Upload to object storage
+              try {
+                const objectStorageService = new ObjectStorageService();
+                const objectPath = await objectStorageService.uploadVideoFromUrl(pollResult.videoUrl);
+
+                await storage.updateScene(scene.id, {
+                  videoUrl: pollResult.videoUrl,
+                  videoObjectPath: objectPath,
+                  externalVideoId: externalId,
+                  status: "video_complete"
+                });
+                successCount++;
+                console.log(`Scene ${scene.sceneNumber} video generated successfully`);
+              } catch (uploadError) {
+                console.error(`Failed to upload scene ${scene.sceneNumber} video:`, uploadError);
+                await storage.updateScene(scene.id, {
+                  videoUrl: pollResult.videoUrl,
+                  externalVideoId: externalId,
+                  status: "video_complete"
+                });
+                successCount++;
+              }
+            } else {
+              await storage.updateScene(scene.id, {
+                status: "failed",
+                errorMessage: `Video generation ${pollResult.status}`
+              });
+              failCount++;
+            }
+          } catch (error) {
+            console.error(`Error generating video for scene ${scene.sceneNumber}:`, error);
+            await storage.updateScene(scene.id, {
+              status: "failed",
+              errorMessage: `Error: ${error}`
+            });
+            failCount++;
+          }
+        }
+
+        // Update chapter status
+        await storage.updateChapter(chapter.id, {
+          status: failCount > 0 && successCount === 0 ? "failed" : "videos_ready",
+          completedScenes: successCount
+        });
+
+        console.log(`Chapter ${chapter.chapterNumber} video generation complete: ${successCount} success, ${failCount} failed`);
+      })().catch(async (error) => {
+        console.error("Chapter video generation error:", error);
+        await storage.updateChapter(chapter.id, { status: "failed" });
+      });
+    } catch (error) {
+      console.error("Start chapter video generation error:", error);
+      res.status(500).json({ error: "Failed to start video generation" });
+    }
+  });
+
+  // Generate videos for all scenes in a film
+  app.post("/api/films/:id/generate-scene-videos", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByFilmId(film.id);
+      if (scenes.length === 0) {
+        res.status(400).json({ 
+          error: "No scenes found. Please split chapters into scenes first using /api/films/:id/split-scenes" 
+        });
+        return;
+      }
+
+      const apiKey = process.env.VIDEOGEN_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: "VIDEOGEN_API_KEY not configured" });
+        return;
+      }
+
+      // Update film stage
+      await storage.updateFilm(film.id, { generationStage: "generating_videos" });
+
+      // Return immediately and process in background
+      res.json({
+        filmId: film.id,
+        message: "Video generation started for all film scenes",
+        totalScenes: scenes.length
+      });
+
+      // Process video generation in background
+      generateFilmSceneVideos(film.id).catch(async (error) => {
+        console.error("Film video generation error:", error);
+        await storage.updateFilm(film.id, { generationStage: "failed" });
+      });
+    } catch (error) {
+      console.error("Start film video generation error:", error);
+      res.status(500).json({ error: "Failed to start video generation" });
+    }
+  });
+
+  // Get video generation progress for a film
+  app.get("/api/films/:id/video-progress", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByFilmId(film.id);
+      const chapters = await storage.getChaptersByFilmId(film.id);
+
+      const videoComplete = scenes.filter(s => s.status === "video_complete" || s.status === "completed").length;
+      const generating = scenes.filter(s => s.status === "generating_video").length;
+      const failed = scenes.filter(s => s.status === "failed").length;
+      const pending = scenes.filter(s => s.status === "pending" || s.status === "audio_complete").length;
+
+      res.json({
+        filmId: film.id,
+        generationStage: film.generationStage,
+        totalScenes: scenes.length,
+        videoComplete,
+        generating,
+        failed,
+        pending,
+        percentComplete: scenes.length > 0 ? Math.round((videoComplete / scenes.length) * 100) : 0,
+        chapters: chapters.map(ch => {
+          const chapterScenes = scenes.filter(s => s.chapterId === ch.id);
+          return {
+            chapterId: ch.id,
+            chapterNumber: ch.chapterNumber,
+            title: ch.title,
+            totalScenes: chapterScenes.length,
+            completedScenes: chapterScenes.filter(s => s.status === "video_complete" || s.status === "completed").length,
+            status: ch.status
+          };
+        })
+      });
+    } catch (error) {
+      console.error("Video progress check error:", error);
+      res.status(500).json({ error: "Failed to get video progress" });
+    }
   });
 
   app.post("/api/text-to-video", async (req, res) => {

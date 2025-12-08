@@ -2989,6 +2989,232 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // Final Film Merge - Combine all chapters into one film
+  // ============================================
+
+  // Merge all completed chapters into final film
+  app.post("/api/films/:id/merge-final", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const chapters = await storage.getChaptersByFilmId(film.id);
+      if (chapters.length === 0) {
+        res.status(400).json({ error: "No chapters found for this film" });
+        return;
+      }
+
+      // Find completed chapters with video paths
+      const completedChapters = chapters
+        .filter(c => c.status === "completed" && c.objectPath)
+        .sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+      if (completedChapters.length === 0) {
+        const pendingCount = chapters.filter(c => c.status !== "completed").length;
+        res.status(400).json({ 
+          error: "No completed chapters ready for final merge",
+          totalChapters: chapters.length,
+          pendingChapters: pendingCount,
+          hint: "Please ensure all chapters are merged first using /api/films/:id/merge-chapters"
+        });
+        return;
+      }
+
+      // Calculate estimated total duration before starting
+      let estimatedDuration = 0;
+      for (const chapter of completedChapters) {
+        estimatedDuration += parseDurationToSeconds(chapter.duration);
+      }
+
+      // Update film stage
+      await storage.updateFilm(film.id, { generationStage: "merging_final" });
+
+      // Return immediately and process in background
+      res.json({
+        filmId: film.id,
+        message: "Final film merge started",
+        chaptersToMerge: completedChapters.length,
+        totalChapters: chapters.length,
+        estimatedDuration: formatDuration(estimatedDuration)
+      });
+
+      // Process final merge in background
+      (async () => {
+        try {
+          console.log(`Starting final merge for film "${film.title}" with ${completedChapters.length} chapters`);
+          
+          const result = await mergeFinalMovie(completedChapters, film.id);
+          
+          // Update film with final video
+          await storage.updateFilm(film.id, {
+            generationStage: "completed",
+            finalVideoUrl: result.videoUrl,
+            finalVideoPath: result.objectPath,
+            status: "completed"
+          });
+          
+          console.log(`Final film merge complete: ${result.objectPath} (${formatDuration(result.duration)})`);
+        } catch (error) {
+          console.error(`Failed to merge final film "${film.title}":`, error);
+          await storage.updateFilm(film.id, { generationStage: "failed" });
+        }
+      })().catch(async (error) => {
+        console.error("Final film merge error:", error);
+        await storage.updateFilm(film.id, { generationStage: "failed" });
+      });
+    } catch (error) {
+      console.error("Start final merge error:", error);
+      res.status(500).json({ error: "Failed to start final film merge" });
+    }
+  });
+
+  // Get final merge progress for a film
+  app.get("/api/films/:id/final-merge-progress", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const chapters = await storage.getChaptersByFilmId(film.id);
+      const completedChapters = chapters.filter(c => c.status === "completed" && c.objectPath);
+      
+      // Calculate total duration from completed chapters
+      let totalDuration = 0;
+      for (const chapter of completedChapters) {
+        totalDuration += parseDurationToSeconds(chapter.duration);
+      }
+
+      res.json({
+        filmId: film.id,
+        filmTitle: film.title,
+        generationStage: film.generationStage,
+        status: film.status,
+        totalChapters: chapters.length,
+        completedChapters: completedChapters.length,
+        readyForFinalMerge: completedChapters.length > 0 && film.generationStage === "chapters_ready",
+        isMerging: film.generationStage === "merging_final",
+        isComplete: film.generationStage === "completed" && !!film.finalVideoPath,
+        estimatedDuration: formatDuration(totalDuration),
+        finalVideoUrl: film.finalVideoUrl,
+        finalVideoPath: film.finalVideoPath,
+        chapters: chapters.map(c => ({
+          chapterNumber: c.chapterNumber,
+          title: c.title,
+          status: c.status,
+          hasVideo: !!c.objectPath,
+          duration: c.duration
+        }))
+      });
+    } catch (error) {
+      console.error("Final merge progress check error:", error);
+      res.status(500).json({ error: "Failed to get final merge progress" });
+    }
+  });
+
+  // Get comprehensive generation progress for a film
+  app.get("/api/films/:id/generation-progress", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const chapters = await storage.getChaptersByFilmId(film.id);
+      const scenes = await storage.getScenesByFilmId(film.id);
+
+      // Calculate scene statistics
+      const sceneStats = {
+        total: scenes.length,
+        pending: scenes.filter(s => s.status === "pending").length,
+        generatingVideo: scenes.filter(s => s.status === "generating_video").length,
+        videoComplete: scenes.filter(s => s.status === "video_complete").length,
+        generatingAudio: scenes.filter(s => s.status === "generating_audio").length,
+        audioComplete: scenes.filter(s => s.status === "audio_complete").length,
+        assembling: scenes.filter(s => s.status === "assembling").length,
+        completed: scenes.filter(s => s.status === "completed").length,
+        failed: scenes.filter(s => s.status === "failed").length,
+      };
+
+      // Calculate chapter statistics
+      const chapterStats = {
+        total: chapters.length,
+        pending: chapters.filter(c => c.status === "pending").length,
+        splittingScenes: chapters.filter(c => c.status === "splitting_scenes").length,
+        scenesReady: chapters.filter(c => c.status === "scenes_ready").length,
+        generatingAudio: chapters.filter(c => c.status === "generating_audio").length,
+        generatingVideos: chapters.filter(c => c.status === "generating_videos").length,
+        assembling: chapters.filter(c => c.status === "assembling").length,
+        merging: chapters.filter(c => c.status === "merging").length,
+        completed: chapters.filter(c => c.status === "completed").length,
+        failed: chapters.filter(c => c.status === "failed").length,
+      };
+
+      // Calculate overall progress percentage
+      let overallProgress = 0;
+      const stageWeights: Record<string, number> = {
+        idle: 0,
+        generating_chapters: 5,
+        splitting_scenes: 15,
+        scenes_ready: 20,
+        generating_audio: 35,
+        generating_videos: 50,
+        assembling_scenes: 70,
+        assembling_chapters: 85,
+        chapters_ready: 90,
+        merging_final: 95,
+        completed: 100,
+        failed: 0
+      };
+      overallProgress = stageWeights[film.generationStage || "idle"] || 0;
+
+      // Calculate estimated total duration
+      let estimatedDuration = 0;
+      for (const chapter of chapters.filter(c => c.status === "completed" && c.objectPath)) {
+        estimatedDuration += parseDurationToSeconds(chapter.duration);
+      }
+
+      res.json({
+        filmId: film.id,
+        filmTitle: film.title,
+        filmMode: film.filmMode,
+        generationStage: film.generationStage,
+        status: film.status,
+        overallProgress,
+        estimatedDuration: formatDuration(estimatedDuration),
+        finalVideoUrl: film.finalVideoUrl,
+        finalVideoPath: film.finalVideoPath,
+        isComplete: film.generationStage === "completed" && !!film.finalVideoPath,
+        scenes: sceneStats,
+        chapters: chapterStats,
+        chapterDetails: chapters.map(c => {
+          const chapterScenes = scenes.filter(s => s.chapterId === c.id);
+          return {
+            id: c.id,
+            chapterNumber: c.chapterNumber,
+            title: c.title,
+            status: c.status,
+            hasVideo: !!c.objectPath,
+            videoUrl: c.videoUrl,
+            duration: c.duration,
+            totalScenes: chapterScenes.length,
+            completedScenes: chapterScenes.filter(s => s.status === "completed").length,
+            failedScenes: chapterScenes.filter(s => s.status === "failed").length
+          };
+        })
+      });
+    } catch (error) {
+      console.error("Generation progress check error:", error);
+      res.status(500).json({ error: "Failed to get generation progress" });
+    }
+  });
+
+  // ============================================
   // Scene Video Generation using VideogenAPI
   // ============================================
 

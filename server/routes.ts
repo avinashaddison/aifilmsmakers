@@ -926,6 +926,208 @@ async function uploadMergedVideo(localPath: string): Promise<{ objectPath: strin
   };
 }
 
+// Download audio file from object storage to temp directory
+async function downloadAudioToTemp(objectPath: string): Promise<string> {
+  const objectStorageService = new ObjectStorageService();
+  
+  // Normalize path - objectStorageService.getSignedDownloadUrl expects /objects/... format
+  // Remove any existing /objects/ prefix to avoid double-prefixing, then add it back
+  let downloadPath = objectPath;
+  if (downloadPath.startsWith('/objects/')) {
+    // Path is already in correct format
+  } else if (downloadPath.startsWith('audio/') || downloadPath.startsWith('videos/')) {
+    // Relative path - add /objects/ prefix
+    downloadPath = `/objects/${downloadPath}`;
+  }
+  
+  const signedUrl = await objectStorageService.getSignedDownloadUrl(downloadPath);
+  
+  const tempPath = path.join("/tmp", `audio_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`);
+  
+  const response = await fetch(signedUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download audio from ${objectPath}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  fs.writeFileSync(tempPath, buffer);
+  
+  return tempPath;
+}
+
+// Get video duration using ffprobe
+async function getVideoDuration(videoPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const ffprobe = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'csv=p=0',
+      videoPath
+    ]);
+    
+    let stdout = '';
+    let stderr = '';
+    
+    ffprobe.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    ffprobe.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    ffprobe.on('close', (code) => {
+      if (code === 0 && stdout.trim()) {
+        const duration = parseFloat(stdout.trim());
+        if (!isNaN(duration)) {
+          resolve(Math.round(duration));
+        } else {
+          resolve(15); // Default fallback
+        }
+      } else {
+        console.error(`ffprobe error: ${stderr}`);
+        resolve(15); // Default fallback on error
+      }
+    });
+    
+    ffprobe.on('error', (err) => {
+      console.error(`ffprobe spawn error:`, err);
+      resolve(15); // Default fallback
+    });
+  });
+}
+
+// Assemble scene video by combining video with audio using ffmpeg
+async function assembleSceneWithFFmpeg(videoPath: string, audioPath: string, outputPath: string): Promise<{ duration: number }> {
+  return new Promise((resolve, reject) => {
+    console.log(`Assembling scene: video=${videoPath}, audio=${audioPath}, output=${outputPath}`);
+    
+    // ffmpeg command to combine video and audio
+    // -shortest: end encoding when the shortest stream ends
+    // -c:v copy: copy video stream without re-encoding
+    // -c:a aac: encode audio to AAC for compatibility
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',
+      '-i', videoPath,
+      '-i', audioPath,
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-map', '0:v:0',
+      '-map', '1:a:0',
+      '-shortest',
+      outputPath
+    ]);
+    
+    let stderr = '';
+    
+    ffmpeg.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    ffmpeg.on('close', async (code) => {
+      if (code === 0) {
+        console.log(`FFmpeg scene assembly completed successfully`);
+        // Get actual duration using ffprobe
+        const duration = await getVideoDuration(outputPath);
+        resolve({ duration });
+      } else {
+        console.error(`FFmpeg stderr: ${stderr}`);
+        reject(new Error(`FFmpeg scene assembly exited with code ${code}`));
+      }
+    });
+    
+    ffmpeg.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+// Assemble a single scene: combine video + audio
+async function assembleScene(scene: any): Promise<{ videoUrl: string; objectPath: string; duration: number }> {
+  if (!scene.videoObjectPath) {
+    throw new Error(`Scene ${scene.sceneNumber} has no video`);
+  }
+  if (!scene.audioObjectPath) {
+    throw new Error(`Scene ${scene.sceneNumber} has no audio`);
+  }
+  
+  console.log(`Assembling scene ${scene.sceneNumber}: video=${scene.videoObjectPath}, audio=${scene.audioObjectPath}`);
+  
+  const tempVideoPath = await downloadVideoToTemp(scene.videoObjectPath);
+  const tempAudioPath = await downloadAudioToTemp(scene.audioObjectPath);
+  const outputPath = path.join("/tmp", `scene_${scene.id}_assembled.mp4`);
+  
+  try {
+    const { duration } = await assembleSceneWithFFmpeg(tempVideoPath, tempAudioPath, outputPath);
+    
+    const uploadResult = await uploadMergedVideo(outputPath);
+    
+    return {
+      videoUrl: uploadResult.publicPath,
+      objectPath: uploadResult.objectPath,
+      duration
+    };
+  } finally {
+    // Cleanup temp files
+    for (const tempPath of [tempVideoPath, tempAudioPath, outputPath]) {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch (e) {
+        console.error(`Failed to cleanup temp file ${tempPath}:`, e);
+      }
+    }
+  }
+}
+
+// Assemble all scenes in a film
+async function assembleFilmScenes(filmId: string): Promise<{ successCount: number; failCount: number }> {
+  const scenes = await storage.getScenesByFilmId(filmId);
+  
+  // Filter scenes that are ready for assembly (have both video and audio)
+  const readyScenes = scenes.filter(s => 
+    s.videoObjectPath && 
+    s.audioObjectPath && 
+    s.status !== "completed" && 
+    s.status !== "assembling"
+  );
+  
+  console.log(`Found ${readyScenes.length} scenes ready for assembly in film ${filmId}`);
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  for (const scene of readyScenes) {
+    try {
+      await storage.updateScene(scene.id, { status: "assembling" });
+      
+      const result = await assembleScene(scene);
+      
+      await storage.updateScene(scene.id, {
+        assembledVideoUrl: result.videoUrl,
+        assembledVideoPath: result.objectPath,
+        actualDuration: result.duration,
+        status: "completed"
+      });
+      
+      successCount++;
+      console.log(`Scene ${scene.sceneNumber} assembled successfully`);
+    } catch (error) {
+      console.error(`Failed to assemble scene ${scene.sceneNumber}:`, error);
+      await storage.updateScene(scene.id, {
+        status: "failed",
+        errorMessage: `Assembly failed: ${error}`
+      });
+      failCount++;
+    }
+  }
+  
+  return { successCount, failCount };
+}
+
 function parseObjectPathInternal(objPath: string): { bucketName: string; objectName: string } {
   if (!objPath.startsWith("/")) {
     objPath = `/${objPath}`;
@@ -2167,6 +2369,287 @@ export async function registerRoutes(
       description: description.substring(0, 100) + "..."
     }));
     res.json(voices);
+  });
+
+  // ============================================
+  // Scene Assembly - Combine Audio + Video
+  // ============================================
+
+  // Assemble a single scene (combine video + audio)
+  app.post("/api/scenes/:id/assemble", async (req, res) => {
+    try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        res.status(404).json({ error: "Scene not found" });
+        return;
+      }
+
+      if (!scene.videoObjectPath) {
+        res.status(400).json({ 
+          error: "Scene has no video. Generate video first using /api/scenes/:id/generate-video" 
+        });
+        return;
+      }
+
+      if (!scene.audioObjectPath) {
+        res.status(400).json({ 
+          error: "Scene has no audio. Generate audio first using /api/scenes/:id/generate-audio" 
+        });
+        return;
+      }
+
+      // Check if already assembled
+      if (scene.assembledVideoPath && scene.status === "completed") {
+        res.json({
+          sceneId: scene.id,
+          message: "Scene already assembled",
+          assembledVideoUrl: scene.assembledVideoUrl,
+          assembledVideoPath: scene.assembledVideoPath
+        });
+        return;
+      }
+
+      await storage.updateScene(scene.id, { status: "assembling" });
+
+      const result = await assembleScene(scene);
+
+      const updatedScene = await storage.updateScene(scene.id, {
+        assembledVideoUrl: result.videoUrl,
+        assembledVideoPath: result.objectPath,
+        actualDuration: result.duration,
+        status: "completed"
+      });
+
+      res.json(updatedScene);
+    } catch (error) {
+      console.error("Scene assembly error:", error);
+      await storage.updateScene(req.params.id, { 
+        status: "failed",
+        errorMessage: `Assembly failed: ${error}`
+      });
+      res.status(500).json({ error: "Failed to assemble scene" });
+    }
+  });
+
+  // Assemble all scenes in a chapter
+  app.post("/api/chapters/:id/assemble-scenes", async (req, res) => {
+    try {
+      const chapter = await storage.getChapter(req.params.id);
+      if (!chapter) {
+        res.status(404).json({ error: "Chapter not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByChapterId(chapter.id);
+      if (scenes.length === 0) {
+        res.status(400).json({ 
+          error: "No scenes found. Please split chapter into scenes first." 
+        });
+        return;
+      }
+
+      // Check which scenes are ready for assembly
+      const readyScenes = scenes.filter(s => 
+        s.videoObjectPath && 
+        s.audioObjectPath && 
+        s.status !== "completed" && 
+        s.status !== "assembling"
+      );
+
+      if (readyScenes.length === 0) {
+        const completedScenes = scenes.filter(s => s.status === "completed");
+        res.json({
+          chapterId: chapter.id,
+          message: completedScenes.length > 0 
+            ? "All ready scenes already assembled" 
+            : "No scenes ready for assembly (need both video and audio)",
+          totalScenes: scenes.length,
+          completedScenes: completedScenes.length,
+          readyForAssembly: 0
+        });
+        return;
+      }
+
+      await storage.updateChapter(chapter.id, { status: "assembling" });
+
+      // Return immediately and process in background
+      res.json({
+        chapterId: chapter.id,
+        message: "Scene assembly started",
+        readyForAssembly: readyScenes.length,
+        totalScenes: scenes.length
+      });
+
+      // Process assembly in background
+      (async () => {
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const scene of readyScenes) {
+          try {
+            await storage.updateScene(scene.id, { status: "assembling" });
+            
+            const result = await assembleScene(scene);
+            
+            await storage.updateScene(scene.id, {
+              assembledVideoUrl: result.videoUrl,
+              assembledVideoPath: result.objectPath,
+              actualDuration: result.duration,
+              status: "completed"
+            });
+            
+            successCount++;
+            console.log(`Scene ${scene.sceneNumber} assembled successfully`);
+          } catch (error) {
+            console.error(`Failed to assemble scene ${scene.sceneNumber}:`, error);
+            await storage.updateScene(scene.id, {
+              status: "failed",
+              errorMessage: `Assembly failed: ${error}`
+            });
+            failCount++;
+          }
+        }
+
+        // Update chapter status
+        await storage.updateChapter(chapter.id, {
+          status: failCount > 0 && successCount === 0 ? "failed" : "assembled",
+          completedScenes: successCount
+        });
+
+        console.log(`Chapter ${chapter.chapterNumber} assembly complete: ${successCount} success, ${failCount} failed`);
+      })().catch(async (error) => {
+        console.error("Chapter assembly error:", error);
+        await storage.updateChapter(chapter.id, { status: "failed" });
+      });
+    } catch (error) {
+      console.error("Start chapter assembly error:", error);
+      res.status(500).json({ error: "Failed to start scene assembly" });
+    }
+  });
+
+  // Assemble all scenes in a film
+  app.post("/api/films/:id/assemble-scenes", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByFilmId(film.id);
+      if (scenes.length === 0) {
+        res.status(400).json({ 
+          error: "No scenes found. Please split chapters into scenes first." 
+        });
+        return;
+      }
+
+      // Check which scenes are ready for assembly
+      const readyScenes = scenes.filter(s => 
+        s.videoObjectPath && 
+        s.audioObjectPath && 
+        s.status !== "completed" && 
+        s.status !== "assembling"
+      );
+
+      if (readyScenes.length === 0) {
+        const completedScenes = scenes.filter(s => s.status === "completed");
+        res.json({
+          filmId: film.id,
+          message: completedScenes.length > 0 
+            ? "All ready scenes already assembled" 
+            : "No scenes ready for assembly (need both video and audio)",
+          totalScenes: scenes.length,
+          completedScenes: completedScenes.length,
+          readyForAssembly: 0
+        });
+        return;
+      }
+
+      // Update film stage
+      await storage.updateFilm(film.id, { generationStage: "assembling_scenes" });
+
+      // Return immediately and process in background
+      res.json({
+        filmId: film.id,
+        message: "Scene assembly started for entire film",
+        readyForAssembly: readyScenes.length,
+        totalScenes: scenes.length
+      });
+
+      // Process assembly in background
+      assembleFilmScenes(film.id).then(async (result) => {
+        console.log(`Film scene assembly complete: ${result.successCount} success, ${result.failCount} failed`);
+        
+        // Update film stage
+        if (result.failCount > 0 && result.successCount === 0) {
+          await storage.updateFilm(film.id, { generationStage: "failed" });
+        } else {
+          await storage.updateFilm(film.id, { generationStage: "scenes_ready" });
+        }
+      }).catch(async (error) => {
+        console.error("Film assembly error:", error);
+        await storage.updateFilm(film.id, { generationStage: "failed" });
+      });
+    } catch (error) {
+      console.error("Start film assembly error:", error);
+      res.status(500).json({ error: "Failed to start scene assembly" });
+    }
+  });
+
+  // Get assembly progress for a film
+  app.get("/api/films/:id/assembly-progress", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByFilmId(film.id);
+      const chapters = await storage.getChaptersByFilmId(film.id);
+
+      const completed = scenes.filter(s => s.status === "completed").length;
+      const assembling = scenes.filter(s => s.status === "assembling").length;
+      const readyForAssembly = scenes.filter(s => 
+        s.videoObjectPath && s.audioObjectPath && 
+        s.status !== "completed" && s.status !== "assembling"
+      ).length;
+      const needsVideo = scenes.filter(s => !s.videoObjectPath).length;
+      const needsAudio = scenes.filter(s => !s.audioObjectPath).length;
+      const failed = scenes.filter(s => s.status === "failed").length;
+
+      res.json({
+        filmId: film.id,
+        generationStage: film.generationStage,
+        totalScenes: scenes.length,
+        completed,
+        assembling,
+        readyForAssembly,
+        needsVideo,
+        needsAudio,
+        failed,
+        percentComplete: scenes.length > 0 ? Math.round((completed / scenes.length) * 100) : 0,
+        chapters: chapters.map(ch => {
+          const chapterScenes = scenes.filter(s => s.chapterId === ch.id);
+          return {
+            chapterId: ch.id,
+            chapterNumber: ch.chapterNumber,
+            title: ch.title,
+            totalScenes: chapterScenes.length,
+            completedScenes: chapterScenes.filter(s => s.status === "completed").length,
+            readyForAssembly: chapterScenes.filter(s => 
+              s.videoObjectPath && s.audioObjectPath && 
+              s.status !== "completed" && s.status !== "assembling"
+            ).length,
+            status: ch.status
+          };
+        })
+      });
+    } catch (error) {
+      console.error("Assembly progress check error:", error);
+      res.status(500).json({ error: "Failed to get assembly progress" });
+    }
   });
 
   // ============================================

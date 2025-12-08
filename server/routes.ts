@@ -1972,9 +1972,19 @@ export async function registerRoutes(
 
       const generatedFramework = await generateStoryFramework(film.title);
 
+      // Map AI response to database schema (genres array -> genre string)
+      const genre = Array.isArray(generatedFramework.genres) 
+        ? generatedFramework.genres.join(", ") 
+        : (generatedFramework.genre || "Drama");
+
       const framework = await storage.createStoryFramework({
         filmId: req.params.id,
-        ...generatedFramework
+        premise: generatedFramework.premise,
+        hook: generatedFramework.hook,
+        genre,
+        tone: generatedFramework.tone,
+        setting: generatedFramework.setting,
+        characters: generatedFramework.characters
       });
 
       await storage.updateFilmStatus(req.params.id, "draft");
@@ -4028,9 +4038,20 @@ async function runFilmGenerationPipeline(filmId: string) {
   if (!framework) {
     console.log("Generating story framework...");
     const generatedFramework = await generateStoryFramework(film.title);
+    
+    // Map AI response to database schema (genres array -> genre string)
+    const genre = Array.isArray(generatedFramework.genres) 
+      ? generatedFramework.genres.join(", ") 
+      : (generatedFramework.genre || "Drama");
+    
     framework = await storage.createStoryFramework({
       filmId,
-      ...generatedFramework
+      premise: generatedFramework.premise,
+      hook: generatedFramework.hook,
+      genre,
+      tone: generatedFramework.tone,
+      setting: generatedFramework.setting,
+      characters: generatedFramework.characters
     });
   }
 

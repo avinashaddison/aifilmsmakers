@@ -166,6 +166,38 @@ export class ObjectStorageService {
     return `/objects/videos/${objectId}.mp4`;
   }
 
+  async uploadAudioFromUrl(audioUrl: string, sceneId: string): Promise<{ objectPath: string; publicUrl: string }> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    const fullPath = `${privateObjectDir}/audio/scenes/${sceneId}.wav`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    const response = await fetch(audioUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch audio from ${audioUrl}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await file.save(buffer, {
+      contentType: 'audio/wav',
+      resumable: false,
+    });
+
+    await setObjectAclPolicy(file, {
+      owner: "system",
+      visibility: "public",
+    });
+
+    const objectPath = `audio/scenes/${sceneId}.wav`;
+    const publicUrl = `/objects/${objectPath}`;
+    
+    return { objectPath, publicUrl };
+  }
+
   async getSignedDownloadUrl(objectPath: string): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
     const entityId = objectPath.replace(/^\/objects\//, '');

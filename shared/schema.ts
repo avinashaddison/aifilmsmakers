@@ -72,6 +72,7 @@ export const GENERATION_STAGES = [
   "idle",
   "generating_chapters",
   "splitting_scenes",
+  "scenes_ready",
   "generating_audio",
   "generating_videos", 
   "assembling_scenes",

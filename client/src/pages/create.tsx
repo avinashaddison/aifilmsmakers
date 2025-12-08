@@ -83,6 +83,19 @@ export default function CreateFilm() {
   
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
+
+  const toggleChapterExpand = (chapterNumber: number) => {
+    setExpandedChapters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chapterNumber)) {
+        newSet.delete(chapterNumber);
+      } else {
+        newSet.add(chapterNumber);
+      }
+      return newSet;
+    });
+  };
 
   const handleFilmModeChange = (mode: FilmMode) => {
     setFilmMode(mode);
@@ -484,9 +497,16 @@ export default function CreateFilm() {
                         <h3 className="font-semibold text-foreground">
                           Chapter {chapter.chapterNumber}: {chapter.title}
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
+                        <p className={`text-sm text-muted-foreground mt-2 whitespace-pre-wrap ${!expandedChapters.has(chapter.chapterNumber) ? 'line-clamp-3' : ''}`}>
                           {chapter.summary}
                         </p>
+                        <button
+                          onClick={() => toggleChapterExpand(chapter.chapterNumber)}
+                          className="text-primary text-xs font-semibold hover:text-primary/80 transition-colors mt-2"
+                          data-testid={`button-expand-chapter-${chapter.chapterNumber}`}
+                        >
+                          {expandedChapters.has(chapter.chapterNumber) ? "Show Less ▲" : "Read Full Chapter ▼"}
+                        </button>
                       </div>
                     </div>
                   </div>

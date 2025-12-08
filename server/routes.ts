@@ -1154,6 +1154,17 @@ function parseDurationToSeconds(duration: string | number | null | undefined): n
   return parseInt(duration) || 30;
 }
 
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
 async function mergeChapterVideos(chapter: any): Promise<{ videoUrl: string; objectPath: string; duration: number }> {
   const videoFrames = chapter.videoFrames || [];
   const completedFrames = videoFrames.filter((f: any) => f.status === "completed" && f.objectPath);
@@ -2649,6 +2660,331 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Assembly progress check error:", error);
       res.status(500).json({ error: "Failed to get assembly progress" });
+    }
+  });
+
+  // ============================================
+  // Chapter Assembly - Merge assembled scenes into chapters
+  // ============================================
+
+  // Merge all assembled scenes into a single chapter video
+  app.post("/api/chapters/:id/merge-scenes", async (req, res) => {
+    try {
+      const chapter = await storage.getChapter(req.params.id);
+      if (!chapter) {
+        res.status(404).json({ error: "Chapter not found" });
+        return;
+      }
+
+      const scenes = await storage.getScenesByChapterId(chapter.id);
+      if (scenes.length === 0) {
+        res.status(400).json({ 
+          error: "No scenes found for this chapter. Please split the chapter into scenes first." 
+        });
+        return;
+      }
+
+      // Check for assembled scenes (status completed with assembledVideoPath)
+      const assembledScenes = scenes
+        .filter(s => s.status === "completed" && s.assembledVideoPath)
+        .sort((a, b) => a.sceneNumber - b.sceneNumber);
+
+      if (assembledScenes.length === 0) {
+        const needsAssembly = scenes.filter(s => 
+          s.videoObjectPath && s.audioObjectPath && s.status !== "completed"
+        ).length;
+        
+        res.status(400).json({ 
+          error: "No assembled scenes ready for merging",
+          totalScenes: scenes.length,
+          needsAssembly,
+          hint: "Please assemble scenes first using /api/chapters/:id/assemble-scenes"
+        });
+        return;
+      }
+
+      // Update chapter status
+      await storage.updateChapter(chapter.id, { status: "merging" });
+
+      // Return immediately and process in background
+      res.json({
+        chapterId: chapter.id,
+        chapterNumber: chapter.chapterNumber,
+        message: "Chapter merge started",
+        assembledScenes: assembledScenes.length,
+        totalScenes: scenes.length
+      });
+
+      // Process merge in background
+      (async () => {
+        const tempInputPaths: string[] = [];
+        const outputPath = path.join("/tmp", `chapter_${chapter.id}_merged.mp4`);
+        
+        try {
+          console.log(`Merging ${assembledScenes.length} assembled scenes for chapter ${chapter.chapterNumber}`);
+          
+          // Download all assembled scene videos to temp directory
+          for (const scene of assembledScenes) {
+            const tempPath = await downloadVideoToTemp(scene.assembledVideoPath!);
+            tempInputPaths.push(tempPath);
+          }
+          
+          // Merge with FFmpeg
+          await mergeVideosWithFFmpeg(tempInputPaths, outputPath);
+          
+          // Upload merged video to object storage
+          const uploadResult = await uploadMergedVideo(outputPath);
+          
+          // Calculate total duration from assembled scenes
+          let totalDuration = 0;
+          for (const scene of assembledScenes) {
+            totalDuration += scene.actualDuration || scene.targetDuration || 15;
+          }
+          
+          // Update chapter with merged video
+          await storage.updateChapter(chapter.id, {
+            status: "completed",
+            videoUrl: uploadResult.publicPath,
+            objectPath: uploadResult.objectPath,
+            duration: formatDuration(totalDuration),
+            completedScenes: assembledScenes.length
+          });
+          
+          console.log(`Chapter ${chapter.chapterNumber} merge complete: ${uploadResult.objectPath}`);
+        } catch (error) {
+          console.error(`Failed to merge chapter ${chapter.chapterNumber}:`, error);
+          await storage.updateChapter(chapter.id, { 
+            status: "failed"
+          });
+        } finally {
+          // Cleanup temp files
+          for (const tempPath of tempInputPaths) {
+            try {
+              if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(tempPath);
+              }
+            } catch (e) {
+              console.error(`Failed to cleanup temp file ${tempPath}:`, e);
+            }
+          }
+          try {
+            if (fs.existsSync(outputPath)) {
+              fs.unlinkSync(outputPath);
+            }
+          } catch (e) {
+            console.error(`Failed to cleanup output file ${outputPath}:`, e);
+          }
+        }
+      })().catch(error => {
+        console.error("Chapter merge error:", error);
+        storage.updateChapter(chapter.id, { status: "failed" });
+      });
+    } catch (error) {
+      console.error("Start chapter merge error:", error);
+      res.status(500).json({ error: "Failed to start chapter merge" });
+    }
+  });
+
+  // Merge all chapters in a film (bulk operation)
+  app.post("/api/films/:id/merge-chapters", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const chapters = await storage.getChaptersByFilmId(film.id);
+      if (chapters.length === 0) {
+        res.status(400).json({ error: "No chapters found for this film" });
+        return;
+      }
+
+      // Get all scenes
+      const allScenes = await storage.getScenesByFilmId(film.id);
+
+      // Find chapters ready for merging (all scenes assembled)
+      const chaptersReady: typeof chapters = [];
+      for (const chapter of chapters) {
+        const chapterScenes = allScenes.filter(s => s.chapterId === chapter.id);
+        const assembledScenes = chapterScenes.filter(s => 
+          s.status === "completed" && s.assembledVideoPath
+        );
+        
+        // Chapter is ready if it has scenes and all are assembled
+        if (chapterScenes.length > 0 && 
+            assembledScenes.length === chapterScenes.length &&
+            chapter.status !== "completed" &&
+            chapter.status !== "merging") {
+          chaptersReady.push(chapter);
+        }
+      }
+
+      if (chaptersReady.length === 0) {
+        const completedChapters = chapters.filter(c => c.status === "completed");
+        res.json({
+          filmId: film.id,
+          message: completedChapters.length > 0 
+            ? "All ready chapters already merged" 
+            : "No chapters ready for merging (scenes not all assembled)",
+          totalChapters: chapters.length,
+          completedChapters: completedChapters.length,
+          readyForMerge: 0
+        });
+        return;
+      }
+
+      // Update film stage
+      await storage.updateFilm(film.id, { generationStage: "assembling_chapters" });
+
+      // Return immediately and process in background
+      res.json({
+        filmId: film.id,
+        message: "Chapter merging started for entire film",
+        readyForMerge: chaptersReady.length,
+        totalChapters: chapters.length
+      });
+
+      // Process all chapters in background
+      (async () => {
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const chapter of chaptersReady) {
+          const chapterScenes = allScenes
+            .filter(s => s.chapterId === chapter.id && s.status === "completed" && s.assembledVideoPath)
+            .sort((a, b) => a.sceneNumber - b.sceneNumber);
+
+          if (chapterScenes.length === 0) {
+            failCount++;
+            continue;
+          }
+
+          const tempInputPaths: string[] = [];
+          const outputPath = path.join("/tmp", `chapter_${chapter.id}_merged.mp4`);
+
+          try {
+            await storage.updateChapter(chapter.id, { status: "merging" });
+            
+            console.log(`Merging ${chapterScenes.length} scenes for chapter ${chapter.chapterNumber}`);
+            
+            // Download all assembled scene videos
+            for (const scene of chapterScenes) {
+              const tempPath = await downloadVideoToTemp(scene.assembledVideoPath!);
+              tempInputPaths.push(tempPath);
+            }
+            
+            // Merge with FFmpeg
+            await mergeVideosWithFFmpeg(tempInputPaths, outputPath);
+            
+            // Upload merged video
+            const uploadResult = await uploadMergedVideo(outputPath);
+            
+            // Calculate total duration
+            let totalDuration = 0;
+            for (const scene of chapterScenes) {
+              totalDuration += scene.actualDuration || scene.targetDuration || 15;
+            }
+            
+            // Update chapter
+            await storage.updateChapter(chapter.id, {
+              status: "completed",
+              videoUrl: uploadResult.publicPath,
+              objectPath: uploadResult.objectPath,
+              duration: formatDuration(totalDuration),
+              completedScenes: chapterScenes.length
+            });
+            
+            successCount++;
+            console.log(`Chapter ${chapter.chapterNumber} merged successfully`);
+          } catch (error) {
+            console.error(`Failed to merge chapter ${chapter.chapterNumber}:`, error);
+            await storage.updateChapter(chapter.id, { status: "failed" });
+            failCount++;
+          } finally {
+            // Cleanup temp files
+            for (const tempPath of tempInputPaths) {
+              try {
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+              } catch (e) {}
+            }
+            try {
+              if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            } catch (e) {}
+          }
+        }
+
+        console.log(`Film chapter merge complete: ${successCount} success, ${failCount} failed`);
+        
+        // Update film stage
+        if (failCount > 0 && successCount === 0) {
+          await storage.updateFilm(film.id, { generationStage: "failed" });
+        } else {
+          await storage.updateFilm(film.id, { generationStage: "chapters_ready" });
+        }
+      })().catch(async (error) => {
+        console.error("Film chapter merge error:", error);
+        await storage.updateFilm(film.id, { generationStage: "failed" });
+      });
+    } catch (error) {
+      console.error("Start film chapter merge error:", error);
+      res.status(500).json({ error: "Failed to start chapter merging" });
+    }
+  });
+
+  // Get chapter merge progress for a film
+  app.get("/api/films/:id/chapter-merge-progress", async (req, res) => {
+    try {
+      const film = await storage.getFilm(req.params.id);
+      if (!film) {
+        res.status(404).json({ error: "Film not found" });
+        return;
+      }
+
+      const chapters = await storage.getChaptersByFilmId(film.id);
+      const allScenes = await storage.getScenesByFilmId(film.id);
+
+      const chapterProgress = chapters.map(chapter => {
+        const chapterScenes = allScenes.filter(s => s.chapterId === chapter.id);
+        const assembledScenes = chapterScenes.filter(s => 
+          s.status === "completed" && s.assembledVideoPath
+        );
+        
+        return {
+          chapterId: chapter.id,
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          status: chapter.status,
+          totalScenes: chapterScenes.length,
+          assembledScenes: assembledScenes.length,
+          allScenesReady: chapterScenes.length > 0 && assembledScenes.length === chapterScenes.length,
+          hasVideo: !!chapter.objectPath,
+          videoUrl: chapter.videoUrl,
+          duration: chapter.duration
+        };
+      });
+
+      const completed = chapterProgress.filter(c => c.status === "completed").length;
+      const merging = chapterProgress.filter(c => c.status === "merging").length;
+      const readyForMerge = chapterProgress.filter(c => 
+        c.allScenesReady && c.status !== "completed" && c.status !== "merging"
+      ).length;
+      const failed = chapterProgress.filter(c => c.status === "failed").length;
+
+      res.json({
+        filmId: film.id,
+        generationStage: film.generationStage,
+        totalChapters: chapters.length,
+        completed,
+        merging,
+        readyForMerge,
+        failed,
+        percentComplete: chapters.length > 0 ? Math.round((completed / chapters.length) * 100) : 0,
+        chapters: chapterProgress
+      });
+    } catch (error) {
+      console.error("Chapter merge progress check error:", error);
+      res.status(500).json({ error: "Failed to get chapter merge progress" });
     }
   });
 

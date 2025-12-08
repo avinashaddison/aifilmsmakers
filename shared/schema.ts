@@ -77,6 +77,7 @@ export const GENERATION_STAGES = [
   "generating_videos", 
   "assembling_scenes",
   "assembling_chapters",
+  "chapters_ready",
   "merging_final",
   "completed",
   "failed"

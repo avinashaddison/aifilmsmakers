@@ -214,14 +214,6 @@ export default function Chapters() {
           )}
         </div>
         <div className="flex gap-3 flex-wrap">
-          <Button 
-            variant="outline" 
-            className="border-white/10 hover:bg-white/5 text-white"
-            onClick={expandedChapters.size === chapters.length ? collapseAllChapters : expandAllChapters}
-            data-testid="button-toggle-all-chapters"
-          >
-            {expandedChapters.size === chapters.length ? "Collapse All" : "Expand All"}
-          </Button>
            <Button 
              variant="outline" 
              className="border-white/10 hover:bg-white/5 text-white"
@@ -320,24 +312,12 @@ export default function Chapters() {
                             </p>
                           )}
                           
-                          <div className="space-y-2">
-                            <p 
-                              className={cn(
-                                "text-gray-400 text-sm md:text-base max-w-3xl whitespace-pre-wrap",
-                                !expandedChapters.has(chapter.id) && "line-clamp-3"
-                              )}
-                              data-testid={`text-chapter-summary-${chapter.id}`}
-                            >
-                              {chapter.summary}
-                            </p>
-                            <button
-                              onClick={() => toggleChapterExpand(chapter.id)}
-                              className="text-primary text-xs font-semibold hover:text-primary/80 transition-colors"
-                              data-testid={`button-expand-chapter-${chapter.id}`}
-                            >
-                              {expandedChapters.has(chapter.id) ? "Show Less ▲" : "Read Full Chapter ▼"}
-                            </button>
-                          </div>
+                          <p 
+                            className="text-gray-400 text-sm md:text-base max-w-3xl whitespace-pre-wrap"
+                            data-testid={`text-chapter-summary-${chapter.id}`}
+                          >
+                            {chapter.summary}
+                          </p>
                           
                           {chapter.artifact && (
                             <div className="mt-3">

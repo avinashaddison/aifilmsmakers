@@ -1612,7 +1612,7 @@ async function generateFilmAudio(filmId: string): Promise<{
   return { totalScenes, successCount, failCount, errors };
 }
 
-// Generate videos for all scenes in a film
+// Generate videos for all scenes in a film using Replicate
 async function generateFilmSceneVideos(filmId: string): Promise<{
   totalScenes: number;
   successCount: number;
@@ -1624,12 +1624,6 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
 
   const chapters = await storage.getChaptersByFilmId(filmId);
   if (chapters.length === 0) throw new Error("No chapters found");
-
-  const apiKey = process.env.VIDEOGEN_API_KEY;
-  if (!apiKey) throw new Error("VIDEOGEN_API_KEY not configured");
-
-  const model = film.videoModel || "kling_21";
-  const resolution = film.frameSize || "1080p";
 
   let totalScenes = 0;
   let successCount = 0;
@@ -1662,106 +1656,47 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
         }
 
         try {
-          console.log(`Starting video generation for chapter ${chapter.chapterNumber}, scene ${scene.sceneNumber}...`);
+          console.log(`Starting Replicate video generation for chapter ${chapter.chapterNumber}, scene ${scene.sceneNumber}...`);
           await storage.updateScene(scene.id, { status: "generating_video" });
 
-          const requestBody = {
-            model,
-            prompt: scene.visualPrompt,
-            duration: Math.min(scene.targetDuration || 15, 20),
-            resolution,
-            aspect_ratio: "16:9"
-          };
-
-          // Retry logic for rate limiting
-          let response: Response | null = null;
-          let retryCount = 0;
-          const maxRetries = 3;
-          
-          while (retryCount < maxRetries) {
-            response = await fetch("https://videogenapi.com/api/v1/generate", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-              },
-              body: JSON.stringify(requestBody)
-            });
-            
-            if (response.ok) break;
-            
-            const errorText = await response.text();
-            
-            // Check for rate limit error
-            if (errorText.includes("Rate limit exceeded")) {
-              const waitTime = 60 * 1000; // Wait 60 seconds
-              console.log(`Rate limit hit, waiting ${waitTime/1000}s before retry ${retryCount + 1}/${maxRetries}...`);
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              retryCount++;
-              continue;
+          // Use Replicate's Wan 2.1 model for video generation
+          const output = await replicate.run("wavespeedai/wan-2.1-t2v-480p", {
+            input: {
+              prompt: scene.visualPrompt,
+              negative_prompt: "blurry, distorted, low quality, watermark, text overlay",
+              num_frames: 81, // ~5 seconds at 16fps
+              guidance_scale: 5.0,
+              num_inference_steps: 30,
+              enable_safety_checker: false,
             }
-            
-            // For other errors, fail immediately
-            const errorMsg = `VideogenAPI error for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${errorText}`;
-            console.error(errorMsg);
-            errors.push(errorMsg);
-            await storage.updateScene(scene.id, { 
-              status: "failed",
-              errorMessage: errorMsg
-            });
-            failCount++;
-            response = null;
-            break;
-          }
-          
-          if (!response || !response.ok) {
-            if (retryCount >= maxRetries) {
-              const errorMsg = `Rate limit exceeded after ${maxRetries} retries for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
-              console.error(errorMsg);
-              errors.push(errorMsg);
-              await storage.updateScene(scene.id, { 
-                status: "failed",
-                errorMessage: errorMsg
-              });
-              failCount++;
-            }
-            continue;
-          }
-          
-          // Add delay between requests to avoid rate limiting (5 seconds between calls)
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          });
 
-          const result = await response.json();
-          const externalId = result.id || result.video_id || result.generation_id;
+          // Replicate returns the video URL directly
+          const videoUrl = typeof output === 'string' ? output : (output as any)?.url || (Array.isArray(output) ? output[0] : null);
 
-          // Poll for completion
-          const pollResult = await pollVideoStatus(externalId, 120); // 10 minutes timeout
-
-          if (pollResult.videoUrl) {
+          if (videoUrl) {
             // Upload to object storage
             try {
               const objectStorageService = new ObjectStorageService();
-              const objectPath = await objectStorageService.uploadVideoFromUrl(pollResult.videoUrl);
+              const objectPath = await objectStorageService.uploadVideoFromUrl(videoUrl);
 
               await storage.updateScene(scene.id, {
-                videoUrl: pollResult.videoUrl,
+                videoUrl: videoUrl,
                 videoObjectPath: objectPath,
-                externalVideoId: externalId,
                 status: "video_complete"
               });
               successCount++;
-              console.log(`Chapter ${chapter.chapterNumber} scene ${scene.sceneNumber} video generated successfully`);
+              console.log(`Chapter ${chapter.chapterNumber} scene ${scene.sceneNumber} video generated successfully via Replicate`);
             } catch (uploadError) {
               console.error(`Failed to upload scene video:`, uploadError);
               await storage.updateScene(scene.id, {
-                videoUrl: pollResult.videoUrl,
-                externalVideoId: externalId,
+                videoUrl: videoUrl,
                 status: "video_complete"
               });
               successCount++;
             }
           } else {
-            const errorMsg = `Video generation ${pollResult.status} for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
+            const errorMsg = `No video URL returned from Replicate for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
             errors.push(errorMsg);
             await storage.updateScene(scene.id, {
               status: "failed",
@@ -1769,6 +1704,10 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
             });
             failCount++;
           }
+          
+          // Small delay between requests
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
         } catch (sceneError) {
           const errorMsg = `Error generating video for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${sceneError}`;
           console.error(errorMsg);

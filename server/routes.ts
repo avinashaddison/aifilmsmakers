@@ -1612,7 +1612,7 @@ async function generateFilmAudio(filmId: string): Promise<{
   return { totalScenes, successCount, failCount, errors };
 }
 
-// Generate videos for all scenes in a film using Replicate
+// Generate videos for all scenes in a film using VideogenAPI
 async function generateFilmSceneVideos(filmId: string): Promise<{
   totalScenes: number;
   successCount: number;
@@ -1624,6 +1624,13 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
 
   const chapters = await storage.getChaptersByFilmId(filmId);
   if (chapters.length === 0) throw new Error("No chapters found");
+
+  const apiKey = process.env.VIDEOGEN_API_KEY;
+  if (!apiKey) throw new Error("VIDEOGEN_API_KEY not configured");
+
+  // Default to higgsfield_v1 model
+  const model = film.videoModel || "higgsfield_v1";
+  const resolution = film.frameSize || "1080p";
 
   let totalScenes = 0;
   let successCount = 0;
@@ -1656,47 +1663,86 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
         }
 
         try {
-          console.log(`Starting Replicate video generation for chapter ${chapter.chapterNumber}, scene ${scene.sceneNumber}...`);
+          console.log(`Starting VideogenAPI video generation for chapter ${chapter.chapterNumber}, scene ${scene.sceneNumber}...`);
           await storage.updateScene(scene.id, { status: "generating_video" });
 
-          // Use Replicate's Wan 2.1 model for video generation
-          const output = await replicate.run("wavespeedai/wan-2.1-t2v-480p", {
-            input: {
-              prompt: scene.visualPrompt,
-              negative_prompt: "blurry, distorted, low quality, watermark, text overlay",
-              num_frames: 81, // ~5 seconds at 16fps
-              guidance_scale: 5.0,
-              num_inference_steps: 30,
-              enable_safety_checker: false,
-            }
+          const requestBody = {
+            model: "higgsfield_v1", // Always use higgsfield_v1 as default
+            prompt: scene.visualPrompt,
+            duration: Math.min(scene.targetDuration || 15, 15),
+            resolution
+          };
+
+          console.log(`VideogenAPI request:`, JSON.stringify(requestBody));
+
+          const response = await fetch("https://videogenapi.com/api/v1/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(requestBody)
           });
 
-          // Replicate returns the video URL directly
-          const videoUrl = typeof output === 'string' ? output : (output as any)?.url || (Array.isArray(output) ? output[0] : null);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`VideogenAPI error: ${errorText}`);
+            
+            // Check for rate limit
+            if (errorText.includes("Rate limit exceeded")) {
+              const errorMsg = `Rate limit exceeded for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}. Try again later.`;
+              errors.push(errorMsg);
+              await storage.updateScene(scene.id, { 
+                status: "failed",
+                errorMessage: errorMsg
+              });
+              failCount++;
+              continue;
+            }
+            
+            const errorMsg = `VideogenAPI error for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${errorText}`;
+            errors.push(errorMsg);
+            await storage.updateScene(scene.id, { 
+              status: "failed",
+              errorMessage: errorMsg
+            });
+            failCount++;
+            continue;
+          }
 
-          if (videoUrl) {
+          const result = await response.json();
+          console.log(`VideogenAPI response:`, JSON.stringify(result));
+          
+          const externalId = result.id || result.video_id || result.generation_id;
+
+          // Poll for completion
+          const pollResult = await pollVideoStatus(externalId, 120); // 10 minutes timeout
+
+          if (pollResult.videoUrl) {
             // Upload to object storage
             try {
               const objectStorageService = new ObjectStorageService();
-              const objectPath = await objectStorageService.uploadVideoFromUrl(videoUrl);
+              const objectPath = await objectStorageService.uploadVideoFromUrl(pollResult.videoUrl);
 
               await storage.updateScene(scene.id, {
-                videoUrl: videoUrl,
+                videoUrl: pollResult.videoUrl,
                 videoObjectPath: objectPath,
+                externalVideoId: externalId,
                 status: "video_complete"
               });
               successCount++;
-              console.log(`Chapter ${chapter.chapterNumber} scene ${scene.sceneNumber} video generated successfully via Replicate`);
+              console.log(`Chapter ${chapter.chapterNumber} scene ${scene.sceneNumber} video generated successfully`);
             } catch (uploadError) {
               console.error(`Failed to upload scene video:`, uploadError);
               await storage.updateScene(scene.id, {
-                videoUrl: videoUrl,
+                videoUrl: pollResult.videoUrl,
+                externalVideoId: externalId,
                 status: "video_complete"
               });
               successCount++;
             }
           } else {
-            const errorMsg = `No video URL returned from Replicate for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
+            const errorMsg = `Video generation ${pollResult.status} for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
             errors.push(errorMsg);
             await storage.updateScene(scene.id, {
               status: "failed",
@@ -1705,8 +1751,8 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
             failCount++;
           }
           
-          // Small delay between requests
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Add delay between requests to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
         } catch (sceneError) {
           const errorMsg = `Error generating video for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${sceneError}`;

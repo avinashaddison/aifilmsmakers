@@ -1673,17 +1673,35 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
             aspect_ratio: "16:9"
           };
 
-          const response = await fetch("https://videogenapi.com/api/v1/generate", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(requestBody)
-          });
-
-          if (!response.ok) {
+          // Retry logic for rate limiting
+          let response: Response | null = null;
+          let retryCount = 0;
+          const maxRetries = 3;
+          
+          while (retryCount < maxRetries) {
+            response = await fetch("https://videogenapi.com/api/v1/generate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(requestBody)
+            });
+            
+            if (response.ok) break;
+            
             const errorText = await response.text();
+            
+            // Check for rate limit error
+            if (errorText.includes("Rate limit exceeded")) {
+              const waitTime = 60 * 1000; // Wait 60 seconds
+              console.log(`Rate limit hit, waiting ${waitTime/1000}s before retry ${retryCount + 1}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              retryCount++;
+              continue;
+            }
+            
+            // For other errors, fail immediately
             const errorMsg = `VideogenAPI error for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}: ${errorText}`;
             console.error(errorMsg);
             errors.push(errorMsg);
@@ -1692,8 +1710,26 @@ async function generateFilmSceneVideos(filmId: string): Promise<{
               errorMessage: errorMsg
             });
             failCount++;
+            response = null;
+            break;
+          }
+          
+          if (!response || !response.ok) {
+            if (retryCount >= maxRetries) {
+              const errorMsg = `Rate limit exceeded after ${maxRetries} retries for chapter ${chapter.chapterNumber} scene ${scene.sceneNumber}`;
+              console.error(errorMsg);
+              errors.push(errorMsg);
+              await storage.updateScene(scene.id, { 
+                status: "failed",
+                errorMessage: errorMsg
+              });
+              failCount++;
+            }
             continue;
           }
+          
+          // Add delay between requests to avoid rate limiting (5 seconds between calls)
+          await new Promise(resolve => setTimeout(resolve, 5000));
 
           const result = await response.json();
           const externalId = result.id || result.video_id || result.generation_id;

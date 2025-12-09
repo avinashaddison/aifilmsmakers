@@ -1,6 +1,46 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+server/public/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
-server/public
-vite.config.ts.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temp files
+*.tmp
+*.temp
+.cache/
+.local/
+
+# Generated assets
+attached_assets/generated_videos/
+attached_assets/audio/
 *.tar.gz
+
+# Vite
+vite.config.ts.*
+
+# Database
+*.db
+*.sqlite
+
+# OS
+Thumbs.db

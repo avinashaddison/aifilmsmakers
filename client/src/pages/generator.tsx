@@ -158,9 +158,12 @@ export default function VideoGenerator() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
-          <p className="text-muted-foreground">Loading chapters...</p>
+        <div className="flex flex-col items-center gap-6">
+          <div className="cyber-spinner" />
+          <div className="text-center">
+            <p className="text-primary font-display font-bold mb-1">Loading Chapters</p>
+            <p className="text-muted-foreground text-sm animate-pulse">Preparing your screenplay...</p>
+          </div>
         </div>
       </div>
     );
@@ -281,12 +284,24 @@ export default function VideoGenerator() {
               </div>
 
               <Button 
-                className="w-full bg-primary hover:bg-primary/90 text-background font-bold h-12 mt-4 shadow-[0_0_15px_rgba(0,243,255,0.3)]"
+                className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-background font-bold h-12 mt-4 shadow-[0_0_20px_rgba(0,243,255,0.4)] cyber-button relative overflow-hidden group"
                 onClick={handleGenerate}
                 disabled={isGenerating}
                 data-testid="button-generate-video"
               >
-                 {isGenerating ? "Generating..." : "Generate Video Clip"}
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  {isGenerating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Generate Video Clip
+                    </>
+                  )}
+                </span>
               </Button>
            </GlassCard>
 
@@ -301,10 +316,36 @@ export default function VideoGenerator() {
           <div className="flex-1 bg-black/50 rounded-xl border border-white/10 relative overflow-hidden group flex items-center justify-center shadow-2xl" data-testid="video-preview-container">
              {/* Video Player */}
              {isGenerating ? (
-                <div className="flex flex-col items-center gap-4">
-                   <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
-                   <div className="text-primary font-mono text-lg">{progress}%</div>
-                   <p className="text-sm text-muted-foreground animate-pulse">Generating video with AI...</p>
+                <div className="absolute inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50">
+                  <div className="text-center space-y-6 p-8">
+                    <div className="relative w-32 h-32 mx-auto">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.1)" strokeWidth="6" fill="none" />
+                        <circle cx="50" cy="50" r="45" stroke="url(#gen-gradient)" strokeWidth="6" fill="none" strokeLinecap="round" 
+                          strokeDasharray={`${progress * 2.83} 283`} className="transition-all duration-500" />
+                        <defs>
+                          <linearGradient id="gen-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#00f3ff" />
+                            <stop offset="100%" stopColor="#bc13fe" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="font-display text-3xl font-bold text-white text-glow">{progress}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-primary font-display font-bold uppercase tracking-wider text-sm">Generating Video</p>
+                      <p className="text-muted-foreground text-sm animate-pulse">AI is creating your cinematic scene...</p>
+                    </div>
+                    <div className="wave-loader justify-center flex gap-1">
+                      <span className="w-1 bg-gradient-to-t from-primary to-secondary rounded animate-pulse" style={{height: '20px', animationDelay: '0s'}} />
+                      <span className="w-1 bg-gradient-to-t from-primary to-secondary rounded animate-pulse" style={{height: '25px', animationDelay: '0.1s'}} />
+                      <span className="w-1 bg-gradient-to-t from-primary to-secondary rounded animate-pulse" style={{height: '15px', animationDelay: '0.2s'}} />
+                      <span className="w-1 bg-gradient-to-t from-primary to-secondary rounded animate-pulse" style={{height: '30px', animationDelay: '0.3s'}} />
+                      <span className="w-1 bg-gradient-to-t from-primary to-secondary rounded animate-pulse" style={{height: '18px', animationDelay: '0.4s'}} />
+                    </div>
+                  </div>
                 </div>
              ) : generatedVideoUrl ? (
                 <video 

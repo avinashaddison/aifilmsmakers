@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, CheckCircle2, XCircle, Film, BookOpen, Video, Merge, Play, Download, Volume2, Scissors, Clock } from "lucide-react";
+import { CyberSpinner, WaveLoader, ProgressRing } from "@/components/ui/loading-effects";
+import { Loader2, CheckCircle2, XCircle, Film, BookOpen, Video, Merge, Play, Download, Volume2, Scissors, Clock, Sparkles } from "lucide-react";
 
 interface GenerationProgress {
   filmId: string;
@@ -162,7 +163,10 @@ export default function ProgressPage() {
   if (!progress) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="text-center space-y-6">
+          <CyberSpinner size="lg" />
+          <p className="text-muted-foreground animate-pulse">Loading progress...</p>
+        </div>
       </div>
     );
   }
@@ -173,27 +177,46 @@ export default function ProgressPage() {
 
   return (
     <div className="min-h-screen py-8 px-4 animate-in fade-in duration-500">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-4xl mx-auto space-y-8 stagger-children">
         <div className="text-center space-y-4">
-          <h1 className="font-display text-4xl md:text-5xl font-bold text-white text-glow" data-testid="text-film-title">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Sparkles className="w-5 h-5 text-secondary animate-pulse" />
+            <span className="text-xs uppercase tracking-widest text-muted-foreground font-display">AI Generation in Progress</span>
+            <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          </div>
+          <h1 className="font-display text-4xl md:text-5xl font-bold text-white text-glow neon-gradient" data-testid="text-film-title">
             {progress.filmTitle}
           </h1>
           <div className="flex items-center justify-center gap-3 text-xl">
-            {currentStageInfo.icon}
-            <span className={isComplete ? "text-green-400" : isFailed ? "text-red-400" : "text-primary"} data-testid="text-stage-label">
+            <div className={!isComplete && !isFailed ? "animate-pulse" : ""}>
+              {currentStageInfo.icon}
+            </div>
+            <span className={isComplete ? "text-green-400 text-glow" : isFailed ? "text-red-400" : "text-primary text-glow"} data-testid="text-stage-label">
               {currentStageInfo.label}
             </span>
           </div>
           <p className="text-muted-foreground" data-testid="text-stage-description">{currentStageInfo.description}</p>
         </div>
 
-        <GlassCard variant="neo" className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Overall Progress</span>
-              <span className="font-bold text-primary" data-testid="text-overall-progress">{progress.overallProgress}%</span>
+        <GlassCard variant="glow" className="p-6 relative overflow-hidden">
+          <div className="absolute inset-0 holographic opacity-30 pointer-events-none" />
+          <div className="space-y-4 relative z-10">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-sm">Overall Progress</span>
+              <div className="flex items-center gap-3">
+                <span className="font-display font-bold text-2xl text-glow text-primary" data-testid="text-overall-progress">{progress.overallProgress}%</span>
+                <ProgressRing progress={progress.overallProgress} size={40} strokeWidth={3} />
+              </div>
             </div>
-            <Progress value={progress.overallProgress} className="h-3" data-testid="progress-overall" />
+            <div className="relative">
+              <Progress value={progress.overallProgress} className="h-4" data-testid="progress-overall" />
+              <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
+                <div 
+                  className="h-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"
+                  style={{ width: `${progress.overallProgress}%` }}
+                />
+              </div>
+            </div>
             
             {progress.estimatedDuration && progress.estimatedDuration !== "00:00" && (
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mt-2">
@@ -202,7 +225,7 @@ export default function ProgressPage() {
               </div>
             )}
             
-            <div className="flex justify-between mt-6 overflow-x-auto pb-2">
+            <div className="flex justify-between mt-6 overflow-x-auto pb-2 px-2">
               {STAGE_ORDER.slice(0, -1).map((stage, index) => {
                 const currentIndex = getCurrentStageIndex();
                 const isActive = index === currentIndex;
@@ -210,9 +233,18 @@ export default function ProgressPage() {
                 const stageInfo = STAGE_LABELS[stage];
                 
                 return (
-                  <div key={stage} className="flex flex-col items-center gap-1 min-w-[60px]">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                      isCompleted ? "bg-green-500" : isActive ? "bg-primary animate-pulse" : "bg-white/10"
+                  <div key={stage} className="flex flex-col items-center gap-2 min-w-[70px] relative">
+                    {index > 0 && (
+                      <div className={`absolute top-4 -left-1/2 w-full h-0.5 ${
+                        index <= currentIndex ? "bg-gradient-to-r from-primary to-secondary" : "bg-white/10"
+                      }`} />
+                    )}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all relative z-10 ${
+                      isCompleted 
+                        ? "bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-500/30" 
+                        : isActive 
+                          ? "bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/50 pulse-glow" 
+                          : "bg-white/10 border border-white/10"
                     }`}>
                       {isCompleted ? (
                         <CheckCircle2 className="w-5 h-5 text-white" />
@@ -222,7 +254,9 @@ export default function ProgressPage() {
                         <span className="text-xs text-muted-foreground">{index + 1}</span>
                       )}
                     </div>
-                    <span className={`text-[10px] text-center ${isActive ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                    <span className={`text-[10px] text-center font-medium ${
+                      isCompleted ? "text-green-400" : isActive ? "text-primary text-glow" : "text-muted-foreground"
+                    }`}>
                       {stageInfo?.label.split(" ")[0]}
                     </span>
                   </div>
@@ -233,41 +267,49 @@ export default function ProgressPage() {
         </GlassCard>
 
         {progress.scenes.total > 0 && (
-          <GlassCard className="p-4">
-            <div className="flex items-center justify-between text-sm mb-3">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <Video className="w-4 h-4" /> Scene Progress
-              </span>
-              <span className="font-mono text-white" data-testid="text-scene-progress">
-                {progress.scenes.completed}/{progress.scenes.total}
-              </span>
+          <GlassCard variant="neo" className="p-5 card-hover">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-blue-500/20">
+                  <Video className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Scene Progress</p>
+                  <p className="text-xs text-muted-foreground">Video clips being generated</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-display font-bold text-xl text-white" data-testid="text-scene-progress">
+                  {progress.scenes.completed}<span className="text-muted-foreground text-sm">/{progress.scenes.total}</span>
+                </span>
+              </div>
             </div>
             <Progress 
               value={progress.scenes.total > 0 ? (progress.scenes.completed / progress.scenes.total) * 100 : 0} 
               className="h-2"
               data-testid="progress-scenes"
             />
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-3 mt-4">
               {progress.scenes.generatingVideo > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                   {progress.scenes.generatingVideo} generating video
                 </span>
               )}
               {progress.scenes.generatingAudio > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-xs text-purple-400">
                   <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                   {progress.scenes.generatingAudio} generating audio
                 </span>
               )}
               {progress.scenes.assembling > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-400">
                   <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
                   {progress.scenes.assembling} assembling
                 </span>
               )}
               {progress.scenes.failed > 0 && (
-                <span className="flex items-center gap-1 text-red-400">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-xs text-red-400">
                   <div className="w-2 h-2 rounded-full bg-red-500" />
                   {progress.scenes.failed} failed
                 </span>
@@ -348,36 +390,42 @@ export default function ProgressPage() {
         </div>
 
         {isComplete && (
-          <GlassCard variant="neo" className="p-8 text-center">
-            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="font-display text-2xl font-bold text-white mb-2">
-              Your Film is Ready!
-            </h2>
-            <p className="text-muted-foreground mb-2">
-              All chapters have been generated and merged into your final movie.
-            </p>
-            {progress.estimatedDuration && (
-              <p className="text-white font-mono mb-6" data-testid="text-final-duration">
-                Total runtime: {progress.estimatedDuration}
+          <GlassCard variant="glow" className="p-8 text-center relative overflow-hidden success-burst">
+            <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 via-transparent to-green-500/10 animate-pulse" />
+            <div className="relative z-10">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/50">
+                <CheckCircle2 className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="font-display text-3xl font-bold text-white mb-2 text-glow">
+                Your Film is Ready!
+              </h2>
+              <p className="text-muted-foreground mb-2">
+                All chapters have been generated and merged into your final movie.
               </p>
-            )}
-            <div className="flex flex-wrap justify-center gap-4">
-              <Button 
-                size="lg" 
-                className="bg-primary hover:bg-primary/90"
-                onClick={() => setLocation(`/download/${filmId}`)}
-                data-testid="button-view-film"
-              >
-                <Play className="mr-2 h-5 w-5" /> Watch Film
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                onClick={() => setLocation(`/download/${filmId}`)}
-                data-testid="button-download-film"
-              >
-                <Download className="mr-2 h-5 w-5" /> Download
-              </Button>
+              {progress.estimatedDuration && (
+                <p className="text-white font-display text-xl mb-6" data-testid="text-final-duration">
+                  Total runtime: <span className="text-primary text-glow">{progress.estimatedDuration}</span>
+                </p>
+              )}
+              <div className="flex flex-wrap justify-center gap-4">
+                <Button 
+                  size="lg" 
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-background font-bold shadow-lg shadow-primary/30 cyber-button"
+                  onClick={() => setLocation(`/download/${filmId}`)}
+                  data-testid="button-view-film"
+                >
+                  <Play className="mr-2 h-5 w-5" /> Watch Film
+                </Button>
+                <Button 
+                  size="lg" 
+                  variant="outline"
+                  className="border-white/20 hover:bg-white/5"
+                  onClick={() => setLocation(`/download/${filmId}`)}
+                  data-testid="button-download-film"
+                >
+                  <Download className="mr-2 h-5 w-5" /> Download
+                </Button>
+              </div>
             </div>
           </GlassCard>
         )}

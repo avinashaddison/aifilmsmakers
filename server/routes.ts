@@ -4082,19 +4082,41 @@ async function runFilmGenerationPipeline(filmId: string) {
     console.log("Generating chapters...");
     const numberOfChapters = film.chapterCount || 5;
     const wordsPerChapter = film.wordsPerChapter || 500;
-    const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
     
-    for (const chapter of generatedChapters) {
-      await storage.createChapter({
-        filmId,
-        chapterNumber: chapter.chapterNumber,
-        title: chapter.title,
-        summary: chapter.summary,
-        prompt: chapter.prompt,
-        status: "pending"
-      });
+    try {
+      const generatedChapters = await generateChapters(film.title, framework, numberOfChapters, wordsPerChapter);
+      
+      if (!generatedChapters || generatedChapters.length === 0) {
+        console.error("Chapter generation returned empty result");
+        await storage.updateFilm(filmId, { generationStage: "failed" });
+        throw new Error("Failed to generate chapters - empty result");
+      }
+      
+      for (const chapter of generatedChapters) {
+        await storage.createChapter({
+          filmId,
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          summary: chapter.summary,
+          prompt: chapter.prompt,
+          status: "pending"
+        });
+      }
+      chapters = await storage.getChaptersByFilmId(filmId);
+      
+      // Verify chapters were actually created
+      if (chapters.length === 0) {
+        console.error("Chapters were generated but not saved to database");
+        await storage.updateFilm(filmId, { generationStage: "failed" });
+        throw new Error("Failed to save chapters to database");
+      }
+      
+      console.log(`Successfully created ${chapters.length} chapters`);
+    } catch (error) {
+      console.error("Chapter generation error:", error);
+      await storage.updateFilm(filmId, { generationStage: "failed" });
+      throw error;
     }
-    chapters = await storage.getChaptersByFilmId(filmId);
   }
 
   // Step 4: Update stage to generating_prompts

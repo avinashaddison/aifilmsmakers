@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Plus, Play, Clock, Film } from "lucide-react";
+import { Plus, Play, Clock, Film, Sparkles, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { CyberSpinner } from "@/components/ui/loading-effects";
 
 interface FilmData {
   id: number;
@@ -77,18 +78,24 @@ export default function Home() {
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-secondary" />
+            <span className="text-xs uppercase tracking-widest text-muted-foreground font-display">AI Film Studio</span>
+          </div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white mb-2 tracking-tight">
-            Welcome Back, <span className="text-primary neon-gradient">Director</span>
+            Welcome Back, <span className="neon-gradient">Director</span>
           </h1>
-          <p className="text-muted-foreground text-lg">Ready to create your next masterpiece?</p>
+          <p className="text-muted-foreground text-lg flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary" />
+            Ready to create your next masterpiece?
+          </p>
         </div>
         <Link href="/create">
           <Button 
             size="lg" 
-            className="bg-primary hover:bg-primary/90 text-background font-bold shadow-[0_0_20px_rgba(0,243,255,0.3)] hover:shadow-[0_0_30px_rgba(0,243,255,0.5)] transition-all relative overflow-hidden group"
+            className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-background font-bold shadow-[0_0_25px_rgba(0,243,255,0.4)] transition-all relative overflow-hidden group cyber-button"
             data-testid="button-create-new-film"
           >
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
             <Plus className="mr-2 h-5 w-5 relative z-10" /> <span className="relative z-10">Create New Film</span>
           </Button>
         </Link>
@@ -102,9 +109,12 @@ export default function Home() {
 
         {isLoading ? (
           <div className="flex items-center justify-center min-h-[300px]">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
-              <p className="text-muted-foreground">Loading films...</p>
+            <div className="flex flex-col items-center gap-6">
+              <CyberSpinner size="lg" />
+              <div className="text-center">
+                <p className="text-primary font-display font-bold mb-1">Loading Films</p>
+                <p className="text-muted-foreground text-sm animate-pulse">Fetching your projects...</p>
+              </div>
             </div>
           </div>
         ) : (
@@ -189,33 +199,33 @@ export default function Home() {
       </section>
 
       {/* Stats / Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <GlassCard className="flex items-center gap-4 group hover:bg-card/50 transition-colors">
-          <div className="w-14 h-14 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)] group-hover:scale-110 transition-transform">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 stagger-children">
+        <GlassCard variant="neo" className="flex items-center gap-4 group card-hover">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex items-center justify-center text-blue-400 border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] group-hover:scale-110 transition-transform pulse-glow">
             <Film className="w-7 h-7" />
           </div>
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Films</p>
-            <p className="text-3xl font-display font-bold text-white" data-testid="text-total-films">
+            <p className="text-3xl font-display font-bold text-white text-glow" data-testid="text-total-films">
               {films.length}
             </p>
           </div>
         </GlassCard>
         
-        <GlassCard className="flex items-center gap-4 group hover:bg-card/50 transition-colors">
-          <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)] group-hover:scale-110 transition-transform">
+        <GlassCard variant="neo" className="flex items-center gap-4 group card-hover">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center text-purple-400 border border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.15)] group-hover:scale-110 transition-transform neon-box-purple">
             <Clock className="w-7 h-7" />
           </div>
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">In Progress</p>
-            <p className="text-3xl font-display font-bold text-white" data-testid="text-in-progress">
+            <p className="text-3xl font-display font-bold text-white text-glow-purple" data-testid="text-in-progress">
               {films.filter(f => f.status === 'generating').length}
             </p>
           </div>
         </GlassCard>
 
-        <GlassCard className="flex items-center gap-4 group hover:bg-card/50 transition-colors">
-          <div className="w-14 h-14 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400 border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)] group-hover:scale-110 transition-transform">
+        <GlassCard variant="neo" className="flex items-center gap-4 group card-hover">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500/20 to-green-600/10 flex items-center justify-center text-green-400 border border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.15)] group-hover:scale-110 transition-transform">
             <Play className="w-7 h-7" />
           </div>
           <div>

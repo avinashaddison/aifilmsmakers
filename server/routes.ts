@@ -4310,13 +4310,16 @@ async function runFilmGenerationPipeline(filmId: string) {
             body: JSON.stringify({
               prompt: frame.prompt,
               model: "higgsfield_v1",
-              duration: 4
+              duration: 5 // higgsfield_v1 requires duration between 5-15 seconds
             })
           });
 
           if (!generateResponse.ok) {
             const errorText = await generateResponse.text();
-            console.error(`Video generation failed: ${errorText}`);
+            const statusCode = generateResponse.status;
+            const statusText = generateResponse.statusText;
+            console.error(`Video generation failed (${statusCode} ${statusText}): ${errorText || 'No error message'}`);
+            console.error(`Request was: prompt="${frame.prompt.substring(0, 100)}...", model=higgsfield_v1, duration=4`);
             
             videoFrames[i] = { ...frame, status: "failed" };
             await storage.updateChapter(chapter.id, { videoFrames });
@@ -4325,7 +4328,7 @@ async function runFilmGenerationPipeline(filmId: string) {
               chapterId: chapter.id,
               chapterNumber: chapter.chapterNumber,
               sceneNumber: frame.frameNumber,
-              error: errorText
+              error: `${statusCode}: ${errorText || statusText || 'Unknown error'}`
             });
             continue;
           }

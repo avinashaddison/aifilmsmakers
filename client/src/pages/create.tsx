@@ -202,13 +202,14 @@ export default function CreateFilm() {
     setIsGeneratingFilm(true);
     
     try {
+      // Step 1: Create the film with idle stage
       const filmResponse = await fetch("/api/films", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           title, 
-          status: "generating",
-          generationStage: "generating_videos",
+          status: "draft",
+          generationStage: "idle",
           filmMode,
           narratorVoice,
           storyLength: "custom",
@@ -221,6 +222,49 @@ export default function CreateFilm() {
 
       if (!filmResponse.ok) throw new Error("Failed to create film");
       const film = await filmResponse.json();
+
+      // Step 2: Save the framework to the database
+      const frameworkResponse = await fetch(`/api/films/${film.id}/framework`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...framework,
+          genre: framework.genres?.join(", ") || "Drama"
+        })
+      });
+      
+      if (!frameworkResponse.ok) {
+        console.error("Failed to save framework, continuing anyway");
+      }
+
+      // Step 3: Save each chapter to the database
+      for (const chapter of chapters) {
+        const chapterResponse = await fetch(`/api/films/${film.id}/chapters`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title,
+            summary: chapter.summary,
+            prompt: chapter.prompt,
+            status: "pending"
+          })
+        });
+        
+        if (!chapterResponse.ok) {
+          console.error(`Failed to save chapter ${chapter.chapterNumber}`);
+        }
+      }
+
+      // Step 4: Start the generation pipeline
+      const startResponse = await fetch(`/api/films/${film.id}/start-generation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      
+      if (!startResponse.ok) {
+        console.error("Failed to start generation");
+      }
 
       toast({ title: "Film Creation Started!", description: "Generating videos for your film..." });
       setLocation(`/progress/${film.id}`);

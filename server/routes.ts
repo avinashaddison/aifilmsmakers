@@ -4308,7 +4308,7 @@ async function runFilmGenerationPipeline(filmId: string) {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              prompt: frame.prompt,
+              prompt: typeof frame.prompt === 'string' ? frame.prompt : String(frame.prompt || ''),
               model: "higgsfield_v1",
               duration: 5 // higgsfield_v1 requires duration between 5-15 seconds
             })
@@ -4319,7 +4319,8 @@ async function runFilmGenerationPipeline(filmId: string) {
             const statusCode = generateResponse.status;
             const statusText = generateResponse.statusText;
             console.error(`Video generation failed (${statusCode} ${statusText}): ${errorText || 'No error message'}`);
-            console.error(`Request was: prompt="${frame.prompt.substring(0, 100)}...", model=higgsfield_v1, duration=4`);
+            const promptPreview = typeof frame.prompt === 'string' ? frame.prompt.substring(0, 100) : JSON.stringify(frame.prompt).substring(0, 100);
+            console.error(`Request was: prompt="${promptPreview}...", model=higgsfield_v1, duration=5`);
             
             videoFrames[i] = { ...frame, status: "failed" };
             await storage.updateChapter(chapter.id, { videoFrames });

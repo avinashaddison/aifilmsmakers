@@ -1,11 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CyberSpinner, WaveLoader, ProgressRing } from "@/components/ui/loading-effects";
-import { Loader2, CheckCircle2, XCircle, Film, BookOpen, Video, Merge, Play, Download, Volume2, Scissors, Clock, Sparkles } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Film, BookOpen, Video, Merge, Play, Download, Volume2, Scissors, Clock, Sparkles, Wifi, WifiOff } from "lucide-react";
+
+// Real-time WebSocket event types
+interface RealtimeEvent {
+  type: string;
+  filmId: string;
+  timestamp: number;
+  message?: string;
+  chapterId?: string;
+  chapterNumber?: number;
+  sceneNumber?: number;
+  videoUrl?: string;
+  progress?: number;
+  completedScenes?: number;
+  totalScenes?: number;
+  error?: string;
+}
+
+// Completed scene video for preview
+interface CompletedScene {
+  chapterNumber: number;
+  sceneNumber: number;
+  videoUrl: string;
+  timestamp: number;
+}
 
 interface GenerationProgress {
   filmId: string;
@@ -87,11 +111,130 @@ export default function ProgressPage() {
   const { filmId } = useParams<{ filmId: string }>();
   const [, setLocation] = useLocation();
   const [isStarting, setIsStarting] = useState(false);
+  const queryClient = useQueryClient();
+  
+  // Real-time state
+  const [wsConnected, setWsConnected] = useState(false);
+  const [realtimeMessage, setRealtimeMessage] = useState<string>("");
+  const [completedVideos, setCompletedVideos] = useState<CompletedScene[]>([]);
+  const [currentlyGenerating, setCurrentlyGenerating] = useState<{ chapter: number; scene: number; prompt?: string } | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const { data: progress, refetch: refetchProgress } = useQuery<GenerationProgress>({
     queryKey: [`/api/films/${filmId}/generation-progress`],
-    refetchInterval: 2000,
+    refetchInterval: wsConnected ? 5000 : 2000, // Poll less frequently when WebSocket is connected
   });
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!filmId) return;
+    
+    let isActive = true;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const connectWebSocket = () => {
+      if (!isActive) return;
+      
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        
+        ws.onopen = () => {
+          if (!isActive) {
+            ws.close();
+            return;
+          }
+          console.log("WebSocket connected");
+          setWsConnected(true);
+          ws.send(JSON.stringify({ type: "subscribe", filmId }));
+        };
+        
+        ws.onmessage = (event) => {
+          if (!isActive) return;
+          
+          try {
+            const data: RealtimeEvent = JSON.parse(event.data);
+            console.log("WebSocket event:", data);
+            
+            if (data.message) {
+              setRealtimeMessage(data.message);
+            }
+            
+            switch (data.type) {
+              case "scene_video_started":
+                setCurrentlyGenerating({
+                  chapter: data.chapterNumber || 0,
+                  scene: data.sceneNumber || 0,
+                  prompt: (data as any).prompt
+                });
+                break;
+                
+              case "scene_video_completed":
+                if (data.videoUrl && data.chapterNumber && data.sceneNumber) {
+                  setCompletedVideos(prev => [
+                    ...prev,
+                    {
+                      chapterNumber: data.chapterNumber!,
+                      sceneNumber: data.sceneNumber!,
+                      videoUrl: data.videoUrl!,
+                      timestamp: data.timestamp
+                    }
+                  ]);
+                  setCurrentlyGenerating(null);
+                }
+                queryClient.invalidateQueries({ queryKey: [`/api/films/${filmId}/generation-progress`] });
+                break;
+                
+              case "scene_video_failed":
+                setCurrentlyGenerating(null);
+                break;
+                
+              case "chapter_complete":
+              case "pipeline_complete":
+              case "stage_update":
+                queryClient.invalidateQueries({ queryKey: [`/api/films/${filmId}/generation-progress`] });
+                break;
+            }
+          } catch (e) {
+            console.error("Error parsing WebSocket message:", e);
+          }
+        };
+        
+        ws.onclose = () => {
+          if (!isActive) return;
+          console.log("WebSocket disconnected");
+          setWsConnected(false);
+          reconnectTimeout = setTimeout(connectWebSocket, 3000);
+        };
+        
+        ws.onerror = (error) => {
+          if (!isActive) return;
+          console.error("WebSocket error:", error);
+          setWsConnected(false);
+        };
+      } catch (error) {
+        if (!isActive) return;
+        console.error("Failed to connect WebSocket:", error);
+        setWsConnected(false);
+      }
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      isActive = false;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [filmId, queryClient]);
 
   useEffect(() => {
     const startGeneration = async () => {
@@ -183,6 +326,15 @@ export default function ProgressPage() {
             <Sparkles className="w-5 h-5 text-secondary animate-pulse" />
             <span className="text-xs uppercase tracking-widest text-muted-foreground font-display">AI Generation in Progress</span>
             <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+            {wsConnected ? (
+              <span className="flex items-center gap-1 text-xs text-green-400 ml-2">
+                <Wifi className="w-3 h-3" /> Live
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
+                <WifiOff className="w-3 h-3" />
+              </span>
+            )}
           </div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white text-glow neon-gradient" data-testid="text-film-title">
             {progress.filmTitle}
@@ -196,7 +348,84 @@ export default function ProgressPage() {
             </span>
           </div>
           <p className="text-muted-foreground" data-testid="text-stage-description">{currentStageInfo.description}</p>
+          
+          {realtimeMessage && !isComplete && (
+            <div className="mt-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-lg inline-flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-sm text-primary" data-testid="text-realtime-message">{realtimeMessage}</span>
+            </div>
+          )}
         </div>
+
+        {/* Real-time Video Preview Section */}
+        {(currentlyGenerating || completedVideos.length > 0) && !isComplete && (
+          <GlassCard variant="neo" className="p-5">
+            <h3 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Video className="w-5 h-5 text-primary" />
+              Real-Time Preview
+              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full ml-2">LIVE</span>
+            </h3>
+            
+            {/* Currently Generating */}
+            {currentlyGenerating && (
+              <div className="mb-4 p-4 rounded-lg bg-black/30 border border-primary/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center pulse-glow">
+                    <Loader2 className="w-4 h-4 animate-spin text-background" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Generating Chapter {currentlyGenerating.chapter}, Scene {currentlyGenerating.scene}
+                    </p>
+                    <p className="text-xs text-muted-foreground">AI is creating this video...</p>
+                  </div>
+                </div>
+                {currentlyGenerating.prompt && (
+                  <p className="text-xs text-muted-foreground bg-black/30 p-2 rounded italic">
+                    "{currentlyGenerating.prompt.substring(0, 150)}..."
+                  </p>
+                )}
+                <WaveLoader className="mt-3" />
+              </div>
+            )}
+            
+            {/* Completed Videos Preview */}
+            {completedVideos.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {completedVideos.slice(-6).map((video, index) => (
+                  <div 
+                    key={`${video.chapterNumber}-${video.sceneNumber}-${video.timestamp}`}
+                    className="relative rounded-lg overflow-hidden border border-white/10 bg-black/50 group"
+                    data-testid={`video-preview-${video.chapterNumber}-${video.sceneNumber}`}
+                  >
+                    <video 
+                      src={video.videoUrl}
+                      className="w-full aspect-video object-cover"
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                      <p className="text-xs text-white font-medium">
+                        Ch.{video.chapterNumber} • Scene {video.sceneNumber}
+                      </p>
+                    </div>
+                    <div className="absolute top-2 right-2 bg-green-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> Done
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {completedVideos.length > 6 && (
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                +{completedVideos.length - 6} more videos generated
+              </p>
+            )}
+          </GlassCard>
+        )}
 
         <GlassCard variant="glow" className="p-6 relative overflow-hidden">
           <div className="absolute inset-0 holographic opacity-30 pointer-events-none" />

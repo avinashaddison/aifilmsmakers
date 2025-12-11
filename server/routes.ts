@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertFilmSchema, insertStoryFrameworkSchema, insertChapterSchema } from "@shared/schema";
 import { z } from "zod";
@@ -9,6 +10,32 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+
+// WebSocket clients map (filmId -> Set of clients)
+const filmClients = new Map<string, Set<WebSocket>>();
+
+// Broadcast to all clients watching a specific film
+function broadcastToFilm(filmId: string, message: object) {
+  const clients = filmClients.get(filmId);
+  if (clients) {
+    const data = JSON.stringify(message);
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    });
+  }
+}
+
+// Helper to emit structured film events
+function emitFilmEvent(filmId: string, eventType: string, payload: object) {
+  broadcastToFilm(filmId, {
+    type: eventType,
+    filmId,
+    timestamp: Date.now(),
+    ...payload
+  });
+}
 
 // Anthropic client using Replit AI Integrations (no API key required)
 const anthropic = new Anthropic({
@@ -3998,6 +4025,47 @@ export async function registerRoutes(
     }
   });
 
+  // Setup WebSocket server for real-time updates
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  
+  wss.on("connection", (ws, req) => {
+    console.log("New WebSocket connection");
+    
+    ws.on("message", (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        if (data.type === "subscribe" && data.filmId) {
+          // Subscribe client to film updates
+          if (!filmClients.has(data.filmId)) {
+            filmClients.set(data.filmId, new Set());
+          }
+          filmClients.get(data.filmId)!.add(ws);
+          console.log(`Client subscribed to film ${data.filmId}`);
+          
+          // Send confirmation
+          ws.send(JSON.stringify({ type: "subscribed", filmId: data.filmId }));
+        }
+        
+        if (data.type === "unsubscribe" && data.filmId) {
+          const clients = filmClients.get(data.filmId);
+          if (clients) {
+            clients.delete(ws);
+          }
+        }
+      } catch (error) {
+        console.error("WebSocket message error:", error);
+      }
+    });
+    
+    ws.on("close", () => {
+      // Remove client from all subscriptions
+      filmClients.forEach((clients) => {
+        clients.delete(ws);
+      });
+    });
+  });
+
   return httpServer;
 }
 
@@ -4039,17 +4107,19 @@ async function pollVideoStatus(externalId: string, maxAttempts: number = 60): Pr
   return { status: "timeout" };
 }
 
-// Main film generation pipeline
+// Main film generation pipeline with real-time WebSocket updates
 async function runFilmGenerationPipeline(filmId: string) {
   console.log(`Starting film generation pipeline for film ${filmId}`);
   
   const apiKey = process.env.VIDEOGEN_API_KEY;
   if (!apiKey) {
+    emitFilmEvent(filmId, "pipeline_error", { error: "VIDEOGEN_API_KEY not configured" });
     throw new Error("VIDEOGEN_API_KEY not configured");
   }
 
   // Step 1: Update stage to generating_chapters
   await storage.updateFilm(filmId, { generationStage: "generating_chapters" });
+  emitFilmEvent(filmId, "stage_update", { stage: "generating_chapters", message: "Starting story generation..." });
   
   const film = await storage.getFilm(filmId);
   if (!film) throw new Error("Film not found");
@@ -4058,6 +4128,8 @@ async function runFilmGenerationPipeline(filmId: string) {
   let framework = await storage.getStoryFrameworkByFilmId(filmId);
   if (!framework) {
     console.log("Generating story framework...");
+    emitFilmEvent(filmId, "framework_generating", { message: "AI is creating your story framework..." });
+    
     const generatedFramework = await generateStoryFramework(film.title);
     
     // Map AI response to database schema (genres array -> genre string)
@@ -4074,12 +4146,19 @@ async function runFilmGenerationPipeline(filmId: string) {
       setting: generatedFramework.setting,
       characters: generatedFramework.characters
     });
+    
+    emitFilmEvent(filmId, "framework_complete", { 
+      message: "Story framework created!",
+      framework: { premise: framework.premise, genre, tone: framework.tone }
+    });
   }
 
   // Step 3: Check if chapters exist, if not generate them
   let chapters = await storage.getChaptersByFilmId(filmId);
   if (chapters.length === 0) {
     console.log("Generating chapters...");
+    emitFilmEvent(filmId, "chapters_generating", { message: "AI is writing your screenplay chapters..." });
+    
     const numberOfChapters = film.chapterCount || 5;
     const wordsPerChapter = film.wordsPerChapter || 500;
     
@@ -4089,17 +4168,28 @@ async function runFilmGenerationPipeline(filmId: string) {
       if (!generatedChapters || generatedChapters.length === 0) {
         console.error("Chapter generation returned empty result");
         await storage.updateFilm(filmId, { generationStage: "failed" });
+        emitFilmEvent(filmId, "pipeline_error", { error: "Failed to generate chapters" });
         throw new Error("Failed to generate chapters - empty result");
       }
       
-      for (const chapter of generatedChapters) {
-        await storage.createChapter({
+      for (let i = 0; i < generatedChapters.length; i++) {
+        const chapter = generatedChapters[i];
+        const createdChapter = await storage.createChapter({
           filmId,
           chapterNumber: chapter.chapterNumber,
           title: chapter.title,
           summary: chapter.summary,
           prompt: chapter.prompt,
           status: "pending"
+        });
+        
+        // Emit chapter created event in real-time
+        emitFilmEvent(filmId, "chapter_created", {
+          chapterNumber: chapter.chapterNumber,
+          chapterId: createdChapter.id,
+          title: chapter.title,
+          totalChapters: generatedChapters.length,
+          progress: Math.round(((i + 1) / generatedChapters.length) * 100)
         });
       }
       chapters = await storage.getChaptersByFilmId(filmId);
@@ -4108,24 +4198,48 @@ async function runFilmGenerationPipeline(filmId: string) {
       if (chapters.length === 0) {
         console.error("Chapters were generated but not saved to database");
         await storage.updateFilm(filmId, { generationStage: "failed" });
+        emitFilmEvent(filmId, "pipeline_error", { error: "Failed to save chapters" });
         throw new Error("Failed to save chapters to database");
       }
       
       console.log(`Successfully created ${chapters.length} chapters`);
+      emitFilmEvent(filmId, "chapters_complete", { 
+        message: `Created ${chapters.length} chapters!`,
+        totalChapters: chapters.length 
+      });
     } catch (error) {
       console.error("Chapter generation error:", error);
       await storage.updateFilm(filmId, { generationStage: "failed" });
+      emitFilmEvent(filmId, "pipeline_error", { error: String(error) });
       throw error;
     }
   }
 
   // Step 4: Update stage to generating_prompts
   await storage.updateFilm(filmId, { generationStage: "generating_prompts" });
+  emitFilmEvent(filmId, "stage_update", { stage: "generating_prompts", message: "Creating scene prompts..." });
 
-  // Step 5: Generate scene prompts for each chapter
+  // Step 5 & 6: Process each chapter - generate prompts and immediately start video generation
+  // This is the REAL-TIME streaming approach: prompt -> video -> next
+  await storage.updateFilm(filmId, { generationStage: "generating_videos" });
+  
+  let totalScenes = 0;
+  let completedScenes = 0;
+  
   for (const chapter of chapters) {
+    console.log(`Processing chapter ${chapter.chapterNumber}: ${chapter.title}`);
+    
+    // Generate scene prompts if not already done
     if (!chapter.scenePrompts || chapter.scenePrompts.length === 0) {
       console.log(`Generating scene prompts for chapter ${chapter.chapterNumber}...`);
+      
+      emitFilmEvent(filmId, "scene_prompts_generating", {
+        chapterId: chapter.id,
+        chapterNumber: chapter.chapterNumber,
+        chapterTitle: chapter.title,
+        message: `Generating scene prompts for "${chapter.title}"...`
+      });
+      
       await storage.updateChapter(chapter.id, { status: "generating_prompts" });
       
       const scenePrompts = await generateScenePrompts(chapter.summary, chapter.title, 3);
@@ -4140,136 +4254,148 @@ async function runFilmGenerationPipeline(filmId: string) {
       await storage.updateChapter(chapter.id, { 
         scenePrompts,
         videoFrames,
-        status: "generating_videos"
+        status: "generating_videos",
+        totalScenes: scenePrompts.length
       });
-    }
-  }
-
-  // Refresh chapters after prompt generation
-  chapters = await storage.getChaptersByFilmId(filmId);
-
-  // Step 6: Update stage to generating_videos
-  await storage.updateFilm(filmId, { generationStage: "generating_videos" });
-
-  // Step 7: Generate videos for each scene prompt
-  for (const chapter of chapters) {
-    if (chapter.status === "completed" || chapter.status === "merging") {
-      continue; // Skip already completed chapters
-    }
-
-    const videoFrames = chapter.videoFrames || [];
-    let updatedFrames = [...videoFrames];
-    let allCompleted = true;
-
-    for (let i = 0; i < updatedFrames.length; i++) {
-      const frame = updatedFrames[i];
       
-      if (frame.status === "completed" && frame.videoUrl) {
-        continue; // Skip already completed frames
-      }
-
-      console.log(`Generating video for chapter ${chapter.chapterNumber}, frame ${frame.frameNumber}...`);
+      emitFilmEvent(filmId, "scene_prompts_ready", {
+        chapterId: chapter.id,
+        chapterNumber: chapter.chapterNumber,
+        sceneCount: scenePrompts.length,
+        prompts: scenePrompts
+      });
       
-      try {
-        // Start video generation
-        const response = await fetch("https://videogenapi.com/api/v1/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: film.videoModel || "kling_21",
-            prompt: frame.prompt,
-            duration: 10,
-            resolution: film.frameSize || "1080p",
-            aspect_ratio: "16:9"
-          })
+      // Now immediately start generating videos for each scene
+      for (let i = 0; i < videoFrames.length; i++) {
+        const frame = videoFrames[i];
+        totalScenes++;
+        
+        emitFilmEvent(filmId, "scene_video_started", {
+          chapterId: chapter.id,
+          chapterNumber: chapter.chapterNumber,
+          sceneNumber: frame.frameNumber,
+          prompt: frame.prompt,
+          message: `Generating video for Chapter ${chapter.chapterNumber}, Scene ${frame.frameNumber}...`
         });
+        
+        try {
+          // Start video generation
+          console.log(`Starting video generation for chapter ${chapter.chapterNumber}, scene ${frame.frameNumber}...`);
+          
+          const generateResponse = await fetch("https://videogenapi.com/api/v1/generate", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              prompt: frame.prompt,
+              model: "higgsfield_v1",
+              duration: 4
+            })
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Video generation failed for frame ${frame.frameNumber}:`, errorText);
-          updatedFrames[i] = { ...frame, status: "failed" };
-          allCompleted = false;
-          continue;
-        }
-
-        const result = await response.json();
-        const externalId = result.id || result.video_id || result.generation_id;
-
-        // Check if video URL is immediately available
-        let videoUrl = result.video_url || result.url;
-
-        if (!videoUrl && externalId) {
-          // Poll for completion
-          updatedFrames[i] = { ...frame, status: "processing", externalId };
-          await storage.updateChapter(chapter.id, { videoFrames: updatedFrames });
-
-          const pollResult = await pollVideoStatus(externalId);
-          if (pollResult.videoUrl) {
-            videoUrl = pollResult.videoUrl;
-          } else {
-            console.error(`Video generation timeout for frame ${frame.frameNumber}`);
-            updatedFrames[i] = { ...frame, status: "failed", externalId };
-            allCompleted = false;
+          if (!generateResponse.ok) {
+            const errorText = await generateResponse.text();
+            console.error(`Video generation failed: ${errorText}`);
+            
+            videoFrames[i] = { ...frame, status: "failed" };
+            await storage.updateChapter(chapter.id, { videoFrames });
+            
+            emitFilmEvent(filmId, "scene_video_failed", {
+              chapterId: chapter.id,
+              chapterNumber: chapter.chapterNumber,
+              sceneNumber: frame.frameNumber,
+              error: errorText
+            });
             continue;
           }
+
+          const generateResult = await generateResponse.json();
+          const externalId = generateResult.id || generateResult.external_id || generateResult.video_id;
+          
+          // Poll for completion
+          const pollResult = await pollVideoStatus(externalId);
+          
+          if (pollResult.videoUrl) {
+            videoFrames[i] = { 
+              ...frame, 
+              status: "completed", 
+              videoUrl: pollResult.videoUrl,
+              externalId 
+            };
+            completedScenes++;
+            
+            await storage.updateChapter(chapter.id, { 
+              videoFrames,
+              completedScenes: videoFrames.filter((f: { status: string }) => f.status === "completed").length
+            });
+            
+            // REAL-TIME: Emit video completed with URL for immediate preview
+            emitFilmEvent(filmId, "scene_video_completed", {
+              chapterId: chapter.id,
+              chapterNumber: chapter.chapterNumber,
+              sceneNumber: frame.frameNumber,
+              videoUrl: pollResult.videoUrl,
+              completedScenes,
+              totalScenes,
+              progress: Math.round((completedScenes / totalScenes) * 100),
+              message: `Video ready! Chapter ${chapter.chapterNumber}, Scene ${frame.frameNumber}`
+            });
+            
+            console.log(`Video completed for chapter ${chapter.chapterNumber}, scene ${frame.frameNumber}`);
+          } else {
+            videoFrames[i] = { ...frame, status: "failed" };
+            await storage.updateChapter(chapter.id, { videoFrames });
+            
+            emitFilmEvent(filmId, "scene_video_failed", {
+              chapterId: chapter.id,
+              chapterNumber: chapter.chapterNumber,
+              sceneNumber: frame.frameNumber,
+              error: "Video generation timeout"
+            });
+          }
+        } catch (error) {
+          console.error(`Error generating video for scene ${frame.frameNumber}:`, error);
+          videoFrames[i] = { ...frame, status: "failed" };
+          await storage.updateChapter(chapter.id, { videoFrames });
+          
+          emitFilmEvent(filmId, "scene_video_failed", {
+            chapterId: chapter.id,
+            chapterNumber: chapter.chapterNumber,
+            sceneNumber: frame.frameNumber,
+            error: String(error)
+          });
         }
-
-        // Upload to object storage
-        try {
-          const objectStorageService = new ObjectStorageService();
-          const objectPath = await objectStorageService.uploadVideoFromUrl(videoUrl);
-          updatedFrames[i] = { 
-            ...frame, 
-            status: "completed", 
-            videoUrl, 
-            objectPath,
-            externalId 
-          };
-        } catch (uploadError) {
-          console.error("Failed to upload to object storage:", uploadError);
-          updatedFrames[i] = { 
-            ...frame, 
-            status: "completed", 
-            videoUrl,
-            externalId 
-          };
-        }
-
-        // Update chapter with progress
-        await storage.updateChapter(chapter.id, { videoFrames: updatedFrames });
-
-      } catch (error) {
-        console.error(`Error generating video for frame ${frame.frameNumber}:`, error);
-        updatedFrames[i] = { ...frame, status: "failed" };
-        allCompleted = false;
       }
-    }
-
-    // Update chapter status
-    if (allCompleted) {
-      await storage.updateChapter(chapter.id, { 
-        videoFrames: updatedFrames,
-        status: "merging"
-      });
-    } else {
-      await storage.updateChapter(chapter.id, { 
-        videoFrames: updatedFrames,
-        status: "failed"
+      
+      // Update chapter as completed
+      await storage.updateChapter(chapter.id, { status: "completed" });
+      
+      emitFilmEvent(filmId, "chapter_complete", {
+        chapterId: chapter.id,
+        chapterNumber: chapter.chapterNumber,
+        title: chapter.title,
+        message: `Chapter ${chapter.chapterNumber} complete!`
       });
     }
   }
 
-  // Step 8: Merge chapter videos
+  // Step 7: Merge chapter videos
   await storage.updateFilm(filmId, { generationStage: "merging_chapters" });
+  emitFilmEvent(filmId, "stage_update", { stage: "merging_chapters", message: "Assembling chapter videos..." });
   
   chapters = await storage.getChaptersByFilmId(filmId);
   for (const chapter of chapters) {
-    if (chapter.status === "merging") {
+    if (chapter.status === "completed" && chapter.videoFrames && chapter.videoFrames.length > 0) {
       try {
         console.log(`Merging videos for chapter ${chapter.chapterNumber}...`);
+        emitFilmEvent(filmId, "chapter_merging", {
+          chapterId: chapter.id,
+          chapterNumber: chapter.chapterNumber,
+          message: `Merging Chapter ${chapter.chapterNumber} videos...`
+        });
+        
         const mergeResult = await mergeChapterVideos(chapter);
         
         await storage.updateChapter(chapter.id, { 
@@ -4279,16 +4405,29 @@ async function runFilmGenerationPipeline(filmId: string) {
           duration: `00:${String(mergeResult.duration).padStart(2, '0')}`
         });
         
+        emitFilmEvent(filmId, "chapter_merged", {
+          chapterId: chapter.id,
+          chapterNumber: chapter.chapterNumber,
+          videoUrl: mergeResult.videoUrl,
+          message: `Chapter ${chapter.chapterNumber} merged!`
+        });
+        
         console.log(`Chapter ${chapter.chapterNumber} merged successfully: ${mergeResult.objectPath}`);
       } catch (mergeError) {
         console.error(`Failed to merge chapter ${chapter.chapterNumber}:`, mergeError);
         await storage.updateChapter(chapter.id, { status: "failed" });
+        emitFilmEvent(filmId, "chapter_merge_failed", {
+          chapterId: chapter.id,
+          chapterNumber: chapter.chapterNumber,
+          error: String(mergeError)
+        });
       }
     }
   }
 
-  // Step 9: Merge all chapter videos into final movie
+  // Step 8: Merge all chapter videos into final movie
   await storage.updateFilm(filmId, { generationStage: "merging_final" });
+  emitFilmEvent(filmId, "stage_update", { stage: "merging_final", message: "Creating final movie..." });
   
   chapters = await storage.getChaptersByFilmId(filmId);
   const completedChapters = chapters.filter(c => c.status === "completed" && c.objectPath);
@@ -4304,14 +4443,25 @@ async function runFilmGenerationPipeline(filmId: string) {
         finalVideoPath: finalResult.objectPath
       });
       
+      emitFilmEvent(filmId, "pipeline_complete", {
+        message: "Your film is ready!",
+        finalVideoUrl: finalResult.videoUrl,
+        totalChapters: completedChapters.length
+      });
+      
       console.log(`Final movie merged successfully: ${finalResult.objectPath}`);
     } catch (finalMergeError) {
       console.error(`Failed to merge final movie:`, finalMergeError);
       await storage.updateFilm(filmId, { generationStage: "failed" });
+      emitFilmEvent(filmId, "pipeline_error", { error: "Failed to merge final movie" });
     }
   } else {
     console.log(`No completed chapters to merge for final movie`);
     await storage.updateFilm(filmId, { generationStage: "completed" });
+    emitFilmEvent(filmId, "pipeline_complete", {
+      message: "Film generation completed (no videos to merge)",
+      totalChapters: 0
+    });
   }
   
   console.log(`Film generation pipeline completed for film ${filmId}`);

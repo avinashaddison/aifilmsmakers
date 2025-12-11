@@ -75,6 +75,31 @@ Preferred communication style: Simple, everyday language.
 - TanStack Query for API data with infinite stale time
 - React hooks for local component state
 - Toast notifications via custom useToast hook
+- WebSocket for real-time generation updates
+
+### Real-Time Streaming (WebSocket)
+
+The application uses WebSocket for real-time updates during video generation:
+
+**Backend (server/routes.ts):**
+- WebSocket server at `/ws` path
+- Film-specific event subscriptions via `{ type: "subscribe", filmId }`
+- Event types emitted during generation:
+  - `stage_update` - Pipeline stage changes
+  - `scene_prompt` - Scene prompt generated
+  - `scene_video_started` - Video generation begins for a scene
+  - `scene_video_completed` - Video ready with URL for preview
+  - `scene_video_failed` - Video generation failed
+  - `chapter_complete` - All scenes in chapter done
+  - `pipeline_complete` - Full film ready
+
+**Frontend (client/src/pages/progress.tsx):**
+- WebSocket connection with auto-reconnect (3s delay)
+- Proper lifecycle management with isActive guard
+- "Live" connection indicator with Wifi icon
+- Real-time message display
+- Video preview grid showing completed scenes as they arrive
+- Reduced polling when WebSocket connected (5s vs 2s)
 
 ### Backend Architecture
 

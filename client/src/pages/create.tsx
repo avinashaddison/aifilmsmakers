@@ -237,8 +237,8 @@ export default function CreateFilm() {
         console.error("Failed to save framework, continuing anyway");
       }
 
-      // Step 3: Save each chapter to the database
-      for (const chapter of chapters) {
+      // Step 3: Save each chapter to the database (must complete before starting pipeline)
+      const chapterSavePromises = chapters.map(async (chapter) => {
         const chapterResponse = await fetch(`/api/films/${film.id}/chapters`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -253,8 +253,14 @@ export default function CreateFilm() {
         
         if (!chapterResponse.ok) {
           console.error(`Failed to save chapter ${chapter.chapterNumber}`);
+          throw new Error(`Failed to save chapter ${chapter.chapterNumber}`);
         }
-      }
+        return chapterResponse.json();
+      });
+      
+      // Wait for ALL chapters to be saved before continuing
+      await Promise.all(chapterSavePromises);
+      console.log(`All ${chapters.length} chapters saved to database`);
 
       // Step 4: Start the generation pipeline
       const startResponse = await fetch(`/api/films/${film.id}/start-generation`, {

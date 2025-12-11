@@ -3995,30 +3995,48 @@ export async function registerRoutes(
     }
   });
 
+  // Track active pipelines to prevent duplicate starts
+  const activePipelines = new Set<string>();
+
   // Start full film generation pipeline
   app.post("/api/films/:id/start-generation", async (req, res) => {
     try {
-      const film = await storage.getFilm(req.params.id);
+      const filmId = req.params.id;
+      
+      // Prevent duplicate pipeline starts
+      if (activePipelines.has(filmId)) {
+        res.json({ message: "Film generation already running", filmId });
+        return;
+      }
+      
+      const film = await storage.getFilm(filmId);
       if (!film) {
         res.status(404).json({ error: "Film not found" });
         return;
       }
 
-      // Allow starting if idle, failed, or generating_chapters (newly created films)
-      const allowedStages = ["idle", "failed", "generating_chapters"];
+      // Only allow starting if truly idle or failed
+      const allowedStages = ["idle", "failed"];
       if (!allowedStages.includes(film.generationStage || "idle")) {
-        res.status(400).json({ error: "Film generation already in progress" });
+        res.json({ message: "Film generation already in progress", filmId });
         return;
       }
 
+      // Mark as active before starting
+      activePipelines.add(filmId);
+      
       // Start the pipeline in background
       res.json({ message: "Film generation started", filmId: film.id });
 
       // Run the pipeline asynchronously
-      runFilmGenerationPipeline(film.id).catch(async (error) => {
-        console.error("Pipeline error:", error);
-        await storage.updateFilm(film.id, { generationStage: "failed" });
-      });
+      runFilmGenerationPipeline(film.id)
+        .catch(async (error) => {
+          console.error("Pipeline error:", error);
+          await storage.updateFilm(film.id, { generationStage: "failed" });
+        })
+        .finally(() => {
+          activePipelines.delete(filmId);
+        });
     } catch (error) {
       console.error("Start generation error:", error);
       res.status(500).json({ error: "Failed to start generation" });

@@ -236,21 +236,17 @@ export default function ProgressPage() {
     };
   }, [filmId, queryClient]);
 
+  // Auto-start generation only if film is truly idle (not already running)
   useEffect(() => {
     const startGeneration = async () => {
       if (!progress || isStarting) return;
       
-      // Auto-start if:
-      // 1. Stage is "idle" - film needs to start generation
-      // 2. Stage is "generating_chapters" with no chapters - needs to start
-      // 3. Skip if already completed or failed
-      const shouldStart = 
-        progress.generationStage === "idle" ||
-        (progress.generationStage === "generating_chapters" && progress.chapters.total === 0);
-      
-      if (shouldStart && progress.generationStage !== "completed" && progress.generationStage !== "failed") {
+      // Only auto-start if stage is exactly "idle" - the pipeline will handle everything else
+      // This prevents duplicate starts when we navigate to progress page
+      if (progress.generationStage === "idle") {
         setIsStarting(true);
         try {
+          console.log("Auto-starting generation for idle film");
           await fetch(`/api/films/${filmId}/start-generation`, {
             method: "POST",
             headers: { "Content-Type": "application/json" }
@@ -265,7 +261,7 @@ export default function ProgressPage() {
     };
 
     startGeneration();
-  }, [progress, filmId, isStarting, refetchProgress]);
+  }, [progress?.generationStage, filmId, isStarting, refetchProgress]);
 
   const getCurrentStageIndex = () => {
     if (!progress?.generationStage) return 0;

@@ -2156,11 +2156,12 @@ export async function registerRoutes(
         return;
       }
 
-      const validatedData = insertChapterSchema.parse(req.body);
-      const chapter = await storage.createChapter({
-        ...validatedData,
+      // Compose payload with filmId from URL before validation
+      const validatedData = insertChapterSchema.parse({
+        ...req.body,
         filmId: req.params.id
       });
+      const chapter = await storage.createChapter(validatedData);
 
       res.json(chapter);
     } catch (error) {

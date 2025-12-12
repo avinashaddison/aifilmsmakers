@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText } from "lucide-react";
+import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText, Maximize2, Minimize2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ActivityMessage {
@@ -63,6 +64,7 @@ export default function CreateFilm() {
   const [customChapters, setCustomChapters] = useState(9);
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const activityRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -352,22 +354,35 @@ export default function CreateFilm() {
     }
   };
 
-  return (
-    <div className="min-h-screen p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* Header */}
-        <div className="text-center space-y-3 py-6">
+  const mainContent = (
+    <>
+      {/* Header */}
+      <div className="text-center space-y-3 py-4">
+        <div className="flex items-center justify-center gap-4">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30">
             <Sparkles className="w-4 h-4 text-primary animate-pulse" />
             <span className="text-sm text-primary font-medium">AI Screenplay Generator</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-display font-bold neon-gradient" data-testid="page-title">
-            Create Your Film
-          </h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="text-muted-foreground hover:text-primary"
+            data-testid="btn-fullscreen-toggle"
+          >
+            {isFullscreen ? (
+              <><Minimize2 className="w-4 h-4 mr-1" /> Exit Fullscreen</>
+            ) : (
+              <><Maximize2 className="w-4 h-4 mr-1" /> Fullscreen</>
+            )}
+          </Button>
         </div>
+        <h1 className="text-3xl md:text-4xl font-display font-bold neon-gradient" data-testid="page-title">
+          {title || "Create Your Film"}
+        </h1>
+      </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+      <div className={`grid gap-6 ${isFullscreen ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           
           {/* Left Column - Input & Agent Activity */}
           <div className="space-y-6">
@@ -700,6 +715,28 @@ export default function CreateFilm() {
             )}
           </div>
         </div>
+    </>
+  );
+
+  // Fullscreen mode - render as portal overlay covering everything
+  if (isFullscreen) {
+    return createPortal(
+      <div className="fixed inset-0 z-[100] bg-background overflow-auto">
+        <div className="min-h-screen p-4 md:p-8">
+          <div className="max-w-[1800px] mx-auto">
+            {mainContent}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  // Normal mode
+  return (
+    <div className="min-h-screen p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {mainContent}
       </div>
     </div>
   );

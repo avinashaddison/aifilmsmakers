@@ -1926,86 +1926,93 @@ ${framework.characters.map((c: any) => `- ${c.name}: ${c.description}${c.appeara
       
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
+        max_tokens: 6000,
         messages: [{
           role: "user",
-          content: `You are a MASTER CINEMATOGRAPHER and VISUAL STORYTELLER working on a $200 million Hollywood production. You create extraordinarily detailed visual prompts that rival the greatest films ever made.
+          content: `You are a MASTER CINEMATOGRAPHER creating IMMERSIVE, VISCERAL scene prompts for a $200 million Hollywood blockbuster. Your prompts must feel like you're INSIDE the scene - raw, immediate, cinematic.
 
-CHAPTER TO TRANSFORM INTO VISUAL POETRY:
+CHAPTER TO TRANSFORM:
 Title: ${chapterTitle || `Chapter ${chapterNumber}`}
-Full Content: ${chapterSummary}
+Content: ${chapterSummary}
 ${characterContext}
 ${settingContext}
 
-YOUR MISSION: Create 4-6 BREATHTAKING scene prompts that transform this chapter into pure visual cinema.
+CREATE 4-6 BREATHTAKING SCENE PROMPTS (300+ words each visualPrompt).
 
-MANDATORY ELEMENTS FOR EACH SCENE (250+ words per visualPrompt):
+WRITE EACH PROMPT AS AN IMMERSIVE CINEMATIC EXPERIENCE:
 
-1. OPENING FRAME COMPOSITION
-   - Exact aspect ratio feel (2.39:1 anamorphic widescreen)
-   - Rule of thirds positioning
-   - Leading lines and visual depth layers (foreground, midground, background)
+Start with the environment and atmosphere - make us FEEL like we're there. Describe weather, time, and setting as if the camera is gliding through it. Use present tense, active language.
 
-2. CHARACTER VISUALIZATION (if characters present)
-   - FULL physical description: exact height, build, posture, age markers
-   - Wardrobe details: fabric textures, colors, wear patterns, accessories
-   - Micro-expressions: specific facial muscle movements, eye moisture, lip tension
-   - Body language: weight distribution, hand positions, breathing patterns
+Include these elements woven naturally into each prompt:
 
-3. LIGHTING MASTERCLASS
-   - Key light: direction, intensity, color temperature (in Kelvin)
-   - Fill ratio and shadow density
-   - Rim/hair light placement
-   - Practical lights within the scene (lamps, candles, screens, windows)
-   - Atmospheric lighting (god rays, dust particles, lens flares)
-   - Color temperature contrast (warm vs cool zones)
+1. CAMERA & MOVEMENT
+   - Camera glides, pushes, tracks, or holds - describe the motion
+   - Low angle, high angle, eye-level - specify the perspective
+   - Handheld documentary realism OR blockbuster clarity OR dreamy Steadicam
+   - Slow-motion for key moments (specify what slows down)
 
-4. CINEMATOGRAPHY SPECIFICATIONS
-   - Lens choice: focal length (24mm, 35mm, 50mm, 85mm, etc.)
-   - Aperture/depth of field (shallow with creamy bokeh vs deep focus)
-   - Camera movement: dolly speed, crane arc, Steadicam flow, static locked-off
-   - Frame rate intention (24fps standard, 48fps smooth, 120fps slow-motion ready)
+2. ENVIRONMENT IMMERSION
+   - Weather affecting everything: rain soaking clothes, wind whipping hair, dust billowing
+   - Textures everywhere: wet mud, cracked earth, gleaming metal, torn fabric
+   - Background elements: distant fires, smoke columns, scattered debris, ambient life
+   - Foreground elements that add depth: drifting ash, falling leaves, floating dust
 
-5. ENVIRONMENTAL STORYTELLING
-   - Weather conditions and how they affect lighting
-   - Time of day with exact sky description
-   - Ambient sounds implied by the visual
-   - Textures: walls, floors, fabrics, skin, metal, wood grain
-   - Production design details: era-appropriate props, set decoration
+3. CHARACTER ACTION & PRESENCE
+   - Characters in motion: running, stumbling, reaching, falling
+   - Physical details: soaked clothes, mud-streaked faces, torn uniforms, desperate eyes
+   - Micro-actions: fingers gripping, chest heaving, lips trembling
+   - Group dynamics: soldiers sprinting past, crowds parting, figures emerging from smoke
 
-6. COLOR SCIENCE & GRADE
-   - Primary color palette (3 dominant colors with hex codes if possible)
-   - Film stock emulation (Kodak 5219, Fuji Eterna, ARRI LogC)
-   - LUT/grade style: teal-orange, tobacco-platinum, day-for-night
-   - Contrast ratio and black level
-   - Highlight treatment (soft roll-off vs harsh clipping)
+4. LIGHTING & COLOR
+   - Blend contrasting tones: cold blue storm + fiery orange flames, golden hour + harsh shadows
+   - Reflections: wet surfaces mirroring explosions, windows catching fire glow
+   - Atmospheric effects: fog rolling, light shafts through smoke, anamorphic flares
+   - Color palette with emotional purpose
 
-7. EMOTIONAL SUBTEXT
-   - What the viewer should FEEL looking at this frame
-   - Visual metaphors and symbolism
-   - Tension or release in the composition
+5. LAYERED SOUNDSCAPE (implied visually)
+   - Describe sounds we can "hear" through the image: thunder rumbling, metal groaning, distant booms
+   - Chaotic layering: gunfire + screams + wind + rain + machinery
 
-EXAMPLE SCENE PROMPT (study this level of detail):
-"WIDE ESTABLISHING SHOT - 2.39:1 anamorphic. A rain-soaked urban alleyway at 2:47 AM. DETECTIVE SARAH CHEN, 38, stands at frame-left third line, her 5'7" athletic frame draped in a charcoal wool overcoat, collar turned up, water droplets beading on the shoulders. Her East Asian features are half-shadowed, sharp cheekbones catching the blue-white spill from a failing sodium streetlamp above (3200K contaminated with 5600K). She holds a creased photograph at waist level, her left thumb absently tracing its edge - a self-soothing gesture she's unaware of. The key light is the streetlamp, harsh and top-down, creating raccoon shadows under her eyes. Fill comes from the ambient city glow reflecting off wet pavement, pushing cyan tones into the shadows (fill ratio 4:1). Behind her, the background falls into bokeh (shot at f/1.4 on a 50mm Cooke S4 anamorphic) - Christmas lights from a distant bar blur into oval orbs of red and gold. Rain falls at 45 degrees, backlit by a practical neon sign reading 'LUCKY FORTUNE' in pink and green. Steam rises from a subway grate at frame-right, adding layered depth. The ground is oil-slicked asphalt reflecting everything - creating a mirror-world underfoot. Color palette: deep cyan shadows (#1a3a4a), warm amber practicals (#d4a574), and clinical white highlights (#e8e8e8). Grade: Tobacco & Teal with crushed blacks and halation on the highlights. The overall feeling: isolation wrapped in beauty, a woman about to step into darkness. Shot on ARRI Alexa 65, 800 ISO, subtle 1/4 Black Pro-Mist filtration for atmosphere. Camera holds static for 4 seconds, then begins an imperceptibly slow push-in (1 inch per second on a Dana Dolly). Film grain: medium-fine, reminiscent of Fincher's 'Zodiac'."
+6. CINEMATIC DETAILS
+   - Film grain, high dynamic range, gritty textures
+   - Anamorphic characteristics: oval bokeh, flares, 2.39:1 framing
+   - Academy-ratio or widescreen - specify the feeling
+   - Shallow depth of field isolating key moments vs. deep focus revealing scale
+
+EXAMPLE PROMPT (study this visceral, immersive style):
+"A brutal World War 2 battlefield under a raging storm, thunder rumbling overhead. The camera glides forward at a low angle through dense smoke, drifting ash, and glowing embers. The ground is a shattered wasteland of mud, torn earth, and craters filled with rainwater reflecting distant fires. Burned-out tanks lie overturned, their armor twisted and melting. Fallen helmets, dog tags, and tattered flags scatter the landscape, half-buried in mud. Splintered trees stand like blackened skeletons against the lightning-lit sky.
+
+In the background, massive artillery shells detonate in ultra slow-motion — shockwaves rippling through the air, sparks flying, chunks of dirt suspended mid-explosion. The soundscape is chaotic and layered: distant machine-gun bursts, muffled booms, metal groans, soldiers shouting through the storm.
+
+A squad of exhausted infantry soldiers sprints past the camera, soaked in rain and covered in soot. Their uniforms are torn, faces streaked with mud and desperation. Bullets whip by with crisp sonic cracks. One soldier slips into the mud, scrambling before diving behind wreckage as an enemy dive bomber roars overhead. The plane's shadow sweeps across the ground like a predator hunting its prey, followed by a deafening strafing run.
+
+Cinematic lighting blends cold blue storm tones with fiery orange from burning vehicles. Wet mud glistens with reflections of explosions. Heavy atmospheric fog rolls across the battlefield, mixing with falling rain and drifting smoke.
+
+Camera style: handheld war documentary realism + modern blockbuster clarity. Soft, shallow depth of field isolates key moments while lightning bursts reveal the full horror in sharp detail. Film grain, high dynamic range, gritty textures, anamorphic flare, Academy-ratio composition. The tone is visceral, emotional, immersive — capturing the chaos, fear, and raw humanity."
 
 OUTPUT FORMAT - Return ONLY this JSON array:
 [
   {
     "sceneNumber": 1,
-    "lineReference": "Exact 1-3 sentence quote from the chapter text",
-    "visualPrompt": "YOUR 250+ WORD MASTERPIECE DESCRIPTION",
-    "mood": "Primary emotion / Secondary undertone (e.g., 'Melancholic / Quietly Defiant')",
-    "cameraWork": "Specific technique with details (e.g., 'Steadicam push-in at 2ft/sec, 35mm anamorphic, f/2.0')",
-    "lightingSetup": "Key: direction/temp, Fill: ratio, Practicals: what/where",
-    "colorPalette": "Three primary colors with descriptions",
-    "soundscape": "Implied ambient audio for this visual",
-    "duration": "Suggested shot duration in seconds",
+    "lineReference": "Key 1-2 sentence quote from the chapter",
+    "visualPrompt": "YOUR 300+ WORD IMMERSIVE CINEMATIC DESCRIPTION - write it as flowing prose, not bullet points",
+    "mood": "Primary emotion / Secondary undertone (e.g., 'Chaos / Desperate Hope')",
+    "cameraWork": "Movement style (e.g., 'Low-angle glide through smoke, handheld urgency, 24mm wide')",
+    "soundscape": "Layered audio implied (e.g., 'Thunder + distant artillery + rain + labored breathing')",
+    "duration": "Shot duration in seconds",
     "characters": ["Names of characters visible"],
-    "setting": "Specific location description"
+    "setting": "Specific location"
   }
 ]
 
-CRITICAL: Write prompts so detailed that a filmmaker could recreate the EXACT image. No vague descriptions. Every element specified. This is cinema.
+CRITICAL RULES:
+- Write prompts as IMMERSIVE PROSE, not technical lists
+- Make us FEEL like we're inside the scene
+- Include weather, debris, and environmental chaos
+- Show characters in ACTION, not static poses  
+- Blend documentary grit with Hollywood scale
+- Every surface has texture, every light has character
+- This is cinema that hits you in the chest
 
 Return ONLY the JSON array.`
         }]

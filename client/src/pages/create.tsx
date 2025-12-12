@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText, Maximize2, Minimize2, X } from "lucide-react";
+import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText, Maximize2, Minimize2, X, Terminal, Cpu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ActivityMessage {
@@ -353,6 +353,129 @@ export default function CreateFilm() {
       case "info": return "border-muted bg-muted/5";
     }
   };
+
+  // Agent Terminal Component for fullscreen mode
+  const AgentTerminal = () => (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center gap-3 p-4 border-b border-primary/30 bg-black/40">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500" />
+          <div className="w-3 h-3 rounded-full bg-green-500" />
+        </div>
+        <div className="flex items-center gap-2 flex-1">
+          <Terminal className="w-4 h-4 text-primary" />
+          <span className="font-mono text-sm text-primary">FilmAI Agent</span>
+        </div>
+        {isGenerating && (
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-primary animate-pulse" />
+            <span className="text-xs text-primary font-mono">PROCESSING</span>
+          </div>
+        )}
+      </div>
+      
+      <div 
+        ref={activityRef}
+        className="flex-1 p-4 overflow-y-auto font-mono text-sm space-y-3 bg-black/20"
+      >
+        {activities.length === 0 ? (
+          <div className="text-muted-foreground/50 text-center py-8">
+            <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>Agent ready. Enter a title and click Generate to start.</p>
+          </div>
+        ) : (
+          activities.map((activity, idx) => (
+            <div
+              key={activity.id}
+              className={`flex items-start gap-3 ${activity.isActive ? "animate-pulse" : ""}`}
+            >
+              <span className="text-muted-foreground shrink-0">[{String(idx + 1).padStart(2, '0')}]</span>
+              <div className="flex items-start gap-2 flex-1">
+                {getActivityIcon(activity.type)}
+                <span className={`${
+                  activity.type === "success" ? "text-green-400" :
+                  activity.type === "action" ? "text-yellow-400" :
+                  activity.type === "thinking" ? "text-blue-400" :
+                  "text-foreground/80"
+                }`}>
+                  {activity.message}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+        {isGenerating && (
+          <div className="flex items-center gap-2 text-primary">
+            <span className="animate-pulse">▊</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Compact controls for fullscreen
+  const CompactControls = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <label className="text-sm font-semibold flex items-center gap-2">
+          <Film className="w-4 h-4 text-primary" />
+          Title
+        </label>
+        <Input
+          type="text"
+          placeholder="Movie title..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={isGenerating}
+          className="bg-background/50 border border-border focus:border-primary"
+          data-testid="input-film-title"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {(["9", "18", "custom"] as MovieLength[]).map((len) => (
+          <button
+            key={len}
+            onClick={() => setMovieLength(len)}
+            disabled={isGenerating}
+            className={`p-2 rounded-lg border text-center text-sm transition-all ${
+              movieLength === len 
+                ? "border-primary bg-primary/20 text-primary" 
+                : "border-border hover:border-primary/50"
+            } ${isGenerating ? "opacity-50" : ""}`}
+          >
+            {len === "custom" ? customChapters : len}
+          </button>
+        ))}
+      </div>
+
+      <Button
+        size="lg"
+        onClick={handleGenerate}
+        disabled={isGenerating || !title || title.length < 3}
+        className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+        data-testid="button-generate"
+      >
+        {isGenerating ? (
+          <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
+        ) : (
+          <><Wand2 className="w-4 h-4 mr-2" /> Generate</>
+        )}
+      </Button>
+
+      {framework && (
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 space-y-2">
+          <div className="flex flex-wrap gap-1">
+            {framework.genres.map((g, i) => (
+              <span key={i} className="px-1.5 py-0.5 rounded bg-primary/20 text-xs">{g}</span>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground line-clamp-3">{framework.premise}</p>
+        </div>
+      )}
+    </div>
+  );
 
   const mainContent = (
     <>
@@ -718,13 +841,109 @@ export default function CreateFilm() {
     </>
   );
 
-  // Fullscreen mode - render as portal overlay covering everything
+  // Fullscreen mode - immersive agent-focused layout
   if (isFullscreen) {
     return createPortal(
-      <div className="fixed inset-0 z-[100] bg-background overflow-auto">
-        <div className="min-h-screen p-4 md:p-8">
-          <div className="max-w-[1800px] mx-auto">
-            {mainContent}
+      <div className="fixed inset-0 z-[100] bg-background flex flex-col">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-primary/20 bg-black/40 backdrop-blur-xl">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <Film className="w-4 h-4 text-black" />
+              </div>
+              <span className="font-display font-bold text-xl text-glow">FILMAI</span>
+            </div>
+            <div className="h-6 w-px bg-border" />
+            <h1 className="font-display font-bold text-lg neon-gradient">
+              {title || "New Screenplay"}
+            </h1>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(false)}
+            className="text-muted-foreground hover:text-primary"
+            data-testid="btn-fullscreen-toggle"
+          >
+            <X className="w-4 h-4 mr-1" /> Exit
+          </Button>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 grid grid-cols-[280px_1fr_1fr] gap-0 overflow-hidden">
+          {/* Left - Compact Controls */}
+          <div className="border-r border-primary/20 bg-black/20 p-4 overflow-y-auto">
+            <CompactControls />
+          </div>
+
+          {/* Center - Agent Terminal */}
+          <div className="border-r border-primary/20 bg-black/30 flex flex-col overflow-hidden">
+            <AgentTerminal />
+          </div>
+
+          {/* Right - Chapters */}
+          <div className="bg-black/20 p-4 overflow-y-auto">
+            {chapters.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-4">
+                  <FileText className="w-5 h-5 text-secondary" />
+                  <h2 className="font-display font-bold">Chapters</h2>
+                  <span className="text-sm text-muted-foreground">({chapters.length}/{getChapterCount()})</span>
+                </div>
+                {chapters.map((chapter) => (
+                  <GlassCard 
+                    key={chapter.chapterNumber} 
+                    className="overflow-hidden"
+                  >
+                    <div 
+                      className="p-3 cursor-pointer flex items-center justify-between hover:bg-white/5"
+                      onClick={() => toggleChapterExpand(chapter.chapterNumber)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                          chapter.scenePrompts ? "bg-gradient-to-br from-primary to-secondary" : "bg-muted"
+                        }`}>
+                          {chapter.chapterNumber}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-sm">{chapter.title}</h3>
+                          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                            {chapter.summary.substring(0, 50)}...
+                          </p>
+                        </div>
+                      </div>
+                      {expandedChapters.has(chapter.chapterNumber) ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </div>
+                    {expandedChapters.has(chapter.chapterNumber) && (
+                      <div className="p-3 border-t border-border space-y-3 bg-black/20">
+                        <p className="text-sm text-foreground/90 whitespace-pre-wrap">{chapter.summary}</p>
+                        {chapter.scenePrompts && chapter.scenePrompts.map((scene) => (
+                          <div key={scene.sceneNumber} className="p-2 rounded bg-secondary/10 border border-secondary/20">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium text-secondary">Scene {scene.sceneNumber}</span>
+                              <span className="text-xs text-muted-foreground">{scene.cameraWork}</span>
+                            </div>
+                            <p className="text-xs text-foreground/80 whitespace-pre-wrap">{scene.visualPrompt}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </GlassCard>
+                ))}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground/50">
+                <div className="text-center">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Chapters will appear here</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>,

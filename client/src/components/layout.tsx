@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, PlusCircle, Video, Library, Film, Sparkles } from "lucide-react";
+import { LayoutDashboard, PlusCircle, Video, Library, Film, Sparkles, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -8,6 +8,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
     { icon: PlusCircle, label: "Create Film", href: "/create" },
+    { icon: BookOpen, label: "Generated Stories", href: "/stories" },
     { icon: Video, label: "Text to Video", href: "/text-to-video" },
     { icon: Library, label: "Video Library", href: "/video-library" },
   ];

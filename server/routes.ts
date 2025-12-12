@@ -1848,10 +1848,10 @@ export async function registerRoutes(
     }
   });
 
-  // Generate detailed scene prompts for a chapter
+  // Generate detailed scene prompts for a chapter with deep character/scene analysis
   app.post("/api/generate-scene-prompts", async (req, res) => {
     try {
-      const { chapterTitle, chapterSummary, chapterNumber } = req.body;
+      const { chapterTitle, chapterSummary, chapterNumber, framework } = req.body;
       
       if (!chapterSummary) {
         res.status(400).json({ error: "Chapter summary is required" });
@@ -1860,38 +1860,69 @@ export async function registerRoutes(
 
       const anthropic = new Anthropic();
       
+      // Build character context for consistency
+      let characterContext = "";
+      if (framework?.characters && framework.characters.length > 0) {
+        characterContext = `\n\nESTABLISHED CHARACTERS (maintain visual consistency):
+${framework.characters.map((c: any) => `- ${c.name}: ${c.description}${c.appearance ? `, Appearance: ${c.appearance}` : ""}${c.age ? `, Age: ${c.age}` : ""}`).join("\n")}`;
+      }
+
+      let settingContext = "";
+      if (framework?.setting) {
+        settingContext = `\n\nESTABLISHED SETTING:
+- Location: ${framework.setting.location}
+- Time Period: ${framework.setting.time}
+- Weather/Atmosphere: ${framework.setting.weather}, ${framework.setting.atmosphere}`;
+      }
+      
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{
           role: "user",
-          content: `You are a cinematic director creating detailed visual prompts for AI video generation.
+          content: `You are an elite Hollywood cinematographer creating detailed visual prompts for AI video generation. Your prompts must be DEEP, CONSISTENT, and CINEMATIC.
 
-Given this chapter from a screenplay:
+CHAPTER TO ANALYZE:
 Title: ${chapterTitle || `Chapter ${chapterNumber}`}
-Content: ${chapterSummary}
+Full Content: ${chapterSummary}
+${characterContext}
+${settingContext}
 
-Create 3 detailed scene prompts that break down this chapter into visual sequences. For each scene:
-1. Identify the key moment/line from the chapter
-2. Create a detailed visual prompt for AI video generation
+TASK: Create 3-5 detailed scene prompts that break down this chapter into visual sequences.
 
-Return JSON array:
+For each scene, you MUST:
+1. Extract the EXACT line/moment from the chapter text
+2. Identify which characters appear and describe them consistently
+3. Describe the setting with rich environmental detail
+4. Create a comprehensive visual prompt (150+ words) including:
+   - Exact character positions, clothing, expressions, body language
+   - Lighting setup (key light, fill light, ambient, practical lights)
+   - Color palette and color grading style
+   - Camera angle, lens choice, depth of field
+   - Movement (character movement, camera movement)
+   - Atmospheric elements (dust particles, rain, fog, shadows)
+   - Time of day and weather consistency
+   - Emotional subtext and visual symbolism
+
+Return JSON array with this EXACT structure:
 [
   {
     "sceneNumber": 1,
-    "lineReference": "The exact line or moment from the chapter this scene depicts",
-    "visualPrompt": "Detailed cinematic prompt: camera angle, lighting, atmosphere, character actions, emotions, colors, 4K quality, professional cinematography",
-    "mood": "The emotional tone (dramatic/tense/hopeful/melancholic/etc)",
-    "cameraWork": "Camera technique (Wide establishing shot/Medium tracking shot/Close-up/etc)"
+    "lineReference": "The exact quote from the chapter this scene depicts - include 1-2 full sentences",
+    "visualPrompt": "A comprehensive 150+ word cinematic description. Example: 'Wide establishing shot of a dimly lit 1940s detective office. JOHN HARRIS, 45, weathered face with salt-and-pepper stubble, wearing a rumpled brown suit and loosened tie, sits behind a cluttered mahogany desk. Warm tungsten key light streams through venetian blinds casting dramatic noir shadows across his face. Rain patters against the window, droplets catching the amber glow of a desk lamp. He holds a yellowed photograph, his calloused fingers trembling slightly. The camera slowly dollies in, shifting from wide to medium close-up. Shallow depth of field isolates his pained expression against the blurred chaos of scattered case files. Cool blue moonlight from outside contrasts with the warm interior, creating a melancholic color palette. Dust particles float in the light beams. Film grain texture, Kodak 5219 color science, anamorphic lens flare.'",
+    "mood": "melancholic/tense/hopeful/dramatic/mysterious/romantic/etc",
+    "cameraWork": "Specific camera technique: Steadicam tracking shot / Crane shot descending / Handheld close-up / Dolly zoom / etc",
+    "characters": ["Character names appearing in this scene"],
+    "setting": "Brief setting description for this specific scene"
   }
 ]
 
-Focus on:
-- Cinematic quality and professional lighting
-- Emotional depth and character expressions
-- Atmospheric details (weather, time of day, environment)
-- Camera movements and compositions
-- 4K/8K quality, film grain, color grading
+CRITICAL RULES:
+- Each visualPrompt MUST be 150+ words with rich, specific detail
+- Character descriptions must remain CONSISTENT across all scenes
+- Include specific film terminology (dolly, crane, steadicam, rack focus, etc.)
+- Reference real cinematography styles (Roger Deakins, Vittorio Storaro, etc.)
+- Every prompt must be immediately usable for AI video generation
 
 Return ONLY the JSON array, no other text.`
         }]
@@ -1911,28 +1942,31 @@ Return ONLY the JSON array, no other text.`
           throw new Error("No JSON array found in response");
         }
       } catch (parseError) {
-        // Fallback: generate basic prompts from the summary
-        const sentences = chapterSummary.split(/[.!?]+/).filter((s: string) => s.trim().length > 10).slice(0, 3);
+        // Fallback: generate detailed prompts from the summary
+        const sentences = chapterSummary.split(/[.!?]+/).filter((s: string) => s.trim().length > 15).slice(0, 4);
         const fallbackPrompts = sentences.map((sentence: string, idx: number) => ({
           sceneNumber: idx + 1,
-          lineReference: sentence.trim().substring(0, 100),
-          visualPrompt: `Cinematic shot: ${sentence.trim()}. Professional lighting, dramatic atmosphere, 4K quality, shallow depth of field.`,
+          lineReference: sentence.trim(),
+          visualPrompt: `Cinematic shot depicting: "${sentence.trim()}". Wide establishing shot transitioning to medium close-up. Professional three-point lighting with warm key light and cool fill. Rich atmospheric detail with visible dust particles in light beams. Shallow depth of field with bokeh background. Film grain texture, professional color grading with teal and orange tones. 4K resolution, anamorphic lens characteristics, subtle camera movement. Roger Deakins inspired cinematography with natural lighting motivation.`,
           mood: "dramatic",
-          cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up"
+          cameraWork: idx === 0 ? "Wide establishing shot with slow dolly in" : idx === 1 ? "Medium tracking shot following action" : idx === 2 ? "Close-up with shallow depth of field" : "Two-shot with rack focus",
+          characters: [],
+          setting: framework?.setting?.location || "Atmospheric location"
         }));
         res.json({ prompts: fallbackPrompts });
       }
     } catch (error) {
       console.error("Error generating scene prompts:", error);
-      // Return fallback prompts on error
-      const { chapterSummary } = req.body;
-      const sentences = (chapterSummary || "").split(/[.!?]+/).filter((s: string) => s.trim().length > 10).slice(0, 3);
+      const { chapterSummary, framework } = req.body;
+      const sentences = (chapterSummary || "").split(/[.!?]+/).filter((s: string) => s.trim().length > 15).slice(0, 4);
       const fallbackPrompts = sentences.map((sentence: string, idx: number) => ({
         sceneNumber: idx + 1,
-        lineReference: sentence.trim().substring(0, 100),
-        visualPrompt: `Cinematic shot: ${sentence.trim()}. Professional lighting, 4K quality.`,
+        lineReference: sentence.trim(),
+        visualPrompt: `Cinematic shot depicting: "${sentence.trim()}". Professional cinematography with dramatic lighting, rich atmosphere, and careful composition. Three-point lighting setup with motivated key light. Shallow depth of field, film grain texture, and professional color grading. 4K resolution with anamorphic lens characteristics.`,
         mood: "dramatic",
-        cameraWork: idx === 0 ? "Wide shot" : idx === 1 ? "Medium shot" : "Close-up"
+        cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up",
+        characters: [],
+        setting: framework?.setting?.location || "Dramatic setting"
       }));
       res.json({ prompts: fallbackPrompts });
     }
@@ -2053,6 +2087,58 @@ Return ONLY the JSON array, no other text.`
       res.json(films);
     } catch (error) {
       res.status(500).json({ error: "Failed to list films" });
+    }
+  });
+
+  // Generated Stories CRUD
+  app.get("/api/generated-stories", async (req, res) => {
+    try {
+      const stories = await storage.listGeneratedStories();
+      res.json(stories);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to list stories" });
+    }
+  });
+
+  app.post("/api/generated-stories", async (req, res) => {
+    try {
+      const { title, framework, chapters, chapterCount } = req.body;
+      if (!title || !framework || !chapters) {
+        res.status(400).json({ error: "Title, framework, and chapters are required" });
+        return;
+      }
+      const story = await storage.createGeneratedStory({
+        title,
+        framework,
+        chapters,
+        chapterCount: chapterCount || chapters.length
+      });
+      res.json(story);
+    } catch (error) {
+      console.error("Error creating story:", error);
+      res.status(500).json({ error: "Failed to create story" });
+    }
+  });
+
+  app.get("/api/generated-stories/:id", async (req, res) => {
+    try {
+      const story = await storage.getGeneratedStory(req.params.id);
+      if (!story) {
+        res.status(404).json({ error: "Story not found" });
+        return;
+      }
+      res.json(story);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get story" });
+    }
+  });
+
+  app.delete("/api/generated-stories/:id", async (req, res) => {
+    try {
+      await storage.deleteGeneratedStory(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete story" });
     }
   });
 

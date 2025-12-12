@@ -6,6 +6,7 @@ import {
   generatedVideos,
   scenes,
   generationJobs,
+  generatedStories,
   type InsertFilm, 
   type Film,
   type InsertStoryFramework,
@@ -17,7 +18,9 @@ import {
   type InsertScene,
   type Scene,
   type InsertGenerationJob,
-  type GenerationJob
+  type GenerationJob,
+  type InsertGeneratedStory,
+  type GeneratedStory
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -57,6 +60,12 @@ export interface IStorage {
   createGenerationJob(job: InsertGenerationJob): Promise<GenerationJob>;
   getGenerationJobByFilmId(filmId: string): Promise<GenerationJob | undefined>;
   updateGenerationJob(id: string, updates: Partial<InsertGenerationJob>): Promise<GenerationJob | undefined>;
+  
+  // Generated Stories
+  createGeneratedStory(story: InsertGeneratedStory): Promise<GeneratedStory>;
+  listGeneratedStories(): Promise<GeneratedStory[]>;
+  getGeneratedStory(id: string): Promise<GeneratedStory | undefined>;
+  deleteGeneratedStory(id: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -221,6 +230,25 @@ export class DbStorage implements IStorage {
       .where(eq(generationJobs.id, id))
       .returning();
     return job;
+  }
+
+  // Generated Stories
+  async createGeneratedStory(insertStory: InsertGeneratedStory): Promise<GeneratedStory> {
+    const [story] = await db.insert(generatedStories).values(insertStory).returning();
+    return story;
+  }
+
+  async listGeneratedStories(): Promise<GeneratedStory[]> {
+    return await db.select().from(generatedStories).orderBy(desc(generatedStories.createdAt));
+  }
+
+  async getGeneratedStory(id: string): Promise<GeneratedStory | undefined> {
+    const [story] = await db.select().from(generatedStories).where(eq(generatedStories.id, id));
+    return story;
+  }
+
+  async deleteGeneratedStory(id: string): Promise<void> {
+    await db.delete(generatedStories).where(eq(generatedStories.id, id));
   }
 }
 

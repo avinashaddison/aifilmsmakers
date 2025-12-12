@@ -14,6 +14,7 @@ import DownloadPage from "@/pages/download";
 import TextToVideo from "@/pages/text-to-video";
 import VideoLibrary from "@/pages/video-library";
 import ProgressPage from "@/pages/progress";
+import StoriesPage from "@/pages/stories";
 
 function Router() {
   return (
@@ -21,6 +22,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/create" component={CreateFilm} />
+        <Route path="/stories" component={StoriesPage} />
         <Route path="/text-to-video" component={TextToVideo} />
         <Route path="/video-library" component={VideoLibrary} />
         <Route path="/progress/:filmId" component={ProgressPage} />

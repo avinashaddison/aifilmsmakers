@@ -122,7 +122,7 @@ export default function CreateFilm() {
     }, 2000);
   };
 
-  const generateScenePrompts = async (chapter: Chapter, chapterIndex: number): Promise<ScenePrompt[]> => {
+  const generateScenePrompts = async (chapter: Chapter, currentFramework: Framework | null): Promise<ScenePrompt[]> => {
     try {
       const response = await fetch("/api/generate-scene-prompts", {
         method: "POST",
@@ -130,7 +130,8 @@ export default function CreateFilm() {
         body: JSON.stringify({
           chapterTitle: chapter.title,
           chapterSummary: chapter.summary,
-          chapterNumber: chapter.chapterNumber
+          chapterNumber: chapter.chapterNumber,
+          framework: currentFramework
         })
       });
 
@@ -138,14 +139,38 @@ export default function CreateFilm() {
       const data = await response.json();
       return data.prompts || [];
     } catch {
-      const lines = chapter.summary.split(/[.!?]+/).filter(l => l.trim().length > 10).slice(0, 3);
+      const lines = chapter.summary.split(/[.!?]+/).filter(l => l.trim().length > 15).slice(0, 4);
       return lines.map((line, idx) => ({
         sceneNumber: idx + 1,
-        lineReference: line.trim().substring(0, 100) + "...",
-        visualPrompt: `Cinematic shot: ${line.trim()}. Professional lighting, 4K quality, dramatic atmosphere.`,
+        lineReference: line.trim(),
+        visualPrompt: `Cinematic shot depicting: "${line.trim()}". Professional three-point lighting with warm key light. Shallow depth of field, film grain texture, professional color grading. 4K resolution with anamorphic lens characteristics. Rich atmospheric detail.`,
         mood: "dramatic",
-        cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up"
+        cameraWork: idx === 0 ? "Wide establishing shot with slow dolly in" : idx === 1 ? "Medium tracking shot" : "Close-up with shallow depth of field"
       }));
+    }
+  };
+
+  const saveStory = async (storyTitle: string, storyFramework: Framework, storyChapters: Chapter[]) => {
+    try {
+      const chaptersForSave = storyChapters.map(ch => ({
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        summary: ch.summary,
+        scenePrompts: ch.scenePrompts || []
+      }));
+
+      await fetch("/api/generated-stories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: storyTitle,
+          framework: storyFramework,
+          chapters: chaptersForSave,
+          chapterCount: storyChapters.length
+        })
+      });
+    } catch (error) {
+      console.error("Failed to save story:", error);
     }
   };
 
@@ -268,33 +293,36 @@ export default function CreateFilm() {
       addActivity("success", `All ${generatedChapters.length} chapters written!`);
       await new Promise(r => setTimeout(r, 300));
 
-      addActivity("action", "Now generating detailed scene prompts for each chapter...", true);
+      addActivity("action", "Now generating detailed scene prompts with character consistency...", true);
 
       for (let i = 0; i < generatedChapters.length; i++) {
         const chapter = generatedChapters[i];
         const promptActivityId = addActivity(
           "thinking", 
-          `Creating scene prompts for Chapter ${chapter.chapterNumber}: "${chapter.title}"...`, 
+          `Deep analysis for Chapter ${chapter.chapterNumber}: "${chapter.title}" - matching characters & setting...`, 
           true
         );
 
         generatedChapters[i].isGeneratingPrompts = true;
         setChapters([...generatedChapters]);
 
-        const prompts = await generateScenePrompts(chapter, i);
+        const prompts = await generateScenePrompts(chapter, newFramework);
         generatedChapters[i].scenePrompts = prompts;
         generatedChapters[i].isGeneratingPrompts = false;
         setChapters([...generatedChapters]);
 
         updateActivity(promptActivityId, { 
           type: "success", 
-          message: `Chapter ${chapter.chapterNumber} scene prompts ready (${prompts.length} scenes)`,
+          message: `Chapter ${chapter.chapterNumber} scene prompts ready (${prompts.length} detailed scenes)`,
           isActive: false 
         });
       }
 
-      addActivity("success", "All scene prompts generated! Your screenplay is ready.");
-      toast({ title: "Generation Complete!", description: `Created ${generatedChapters.length} chapters with scene prompts.` });
+      addActivity("action", "Saving your screenplay to the library...", true);
+      await saveStory(title, newFramework, generatedChapters);
+      addActivity("success", "Screenplay saved! View it in Generated Stories.");
+      
+      toast({ title: "Generation Complete!", description: `Created ${generatedChapters.length} chapters with scene prompts. Saved to library.` });
 
     } catch (error) {
       console.error("Error generating:", error);
@@ -623,8 +651,10 @@ export default function CreateFilm() {
                                         </span>
                                         <span className="text-xs text-muted-foreground">{scene.cameraWork}</span>
                                       </div>
-                                      <p className="text-xs text-muted-foreground italic truncate">"{scene.lineReference}"</p>
-                                      <p className="text-xs text-foreground/90">{scene.visualPrompt}</p>
+                                      <p className="text-xs text-muted-foreground italic">Line: "{scene.lineReference}"</p>
+                                      <div className="mt-2 p-2 rounded bg-background/50 border border-border">
+                                        <p className="text-xs text-foreground whitespace-pre-wrap">{scene.visualPrompt}</p>
+                                      </div>
                                     </div>
                                     <Button
                                       variant="ghost"

@@ -285,3 +285,52 @@ export const insertGenerationJobSchema = createInsertSchema(generationJobs).omit
 });
 export type InsertGenerationJob = z.infer<typeof insertGenerationJobSchema>;
 export type GenerationJob = typeof generationJobs.$inferSelect;
+
+// Generated Stories table - stores completed screenplay generations
+export const generatedStories = pgTable("generated_stories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  framework: jsonb("framework").notNull().$type<{
+    genres: string[];
+    premise: string;
+    hook: string;
+    tone?: string;
+    setting?: {
+      location: string;
+      time: string;
+      weather: string;
+      atmosphere: string;
+    };
+    characters?: Array<{
+      name: string;
+      age: number;
+      role: string;
+      description: string;
+      appearance?: string;
+      personality?: string;
+    }>;
+  }>(),
+  chapters: jsonb("chapters").notNull().$type<Array<{
+    chapterNumber: number;
+    title: string;
+    summary: string;
+    scenePrompts: Array<{
+      sceneNumber: number;
+      lineReference: string;
+      visualPrompt: string;
+      mood: string;
+      cameraWork: string;
+      characters?: string[];
+      setting?: string;
+    }>;
+  }>>(),
+  chapterCount: integer("chapter_count").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertGeneratedStorySchema = createInsertSchema(generatedStories).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertGeneratedStory = z.infer<typeof insertGeneratedStorySchema>;
+export type GeneratedStory = typeof generatedStories.$inferSelect;

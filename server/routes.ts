@@ -1848,6 +1848,96 @@ export async function registerRoutes(
     }
   });
 
+  // Generate detailed scene prompts for a chapter
+  app.post("/api/generate-scene-prompts", async (req, res) => {
+    try {
+      const { chapterTitle, chapterSummary, chapterNumber } = req.body;
+      
+      if (!chapterSummary) {
+        res.status(400).json({ error: "Chapter summary is required" });
+        return;
+      }
+
+      const anthropic = new Anthropic();
+      
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [{
+          role: "user",
+          content: `You are a cinematic director creating detailed visual prompts for AI video generation.
+
+Given this chapter from a screenplay:
+Title: ${chapterTitle || `Chapter ${chapterNumber}`}
+Content: ${chapterSummary}
+
+Create 3 detailed scene prompts that break down this chapter into visual sequences. For each scene:
+1. Identify the key moment/line from the chapter
+2. Create a detailed visual prompt for AI video generation
+
+Return JSON array:
+[
+  {
+    "sceneNumber": 1,
+    "lineReference": "The exact line or moment from the chapter this scene depicts",
+    "visualPrompt": "Detailed cinematic prompt: camera angle, lighting, atmosphere, character actions, emotions, colors, 4K quality, professional cinematography",
+    "mood": "The emotional tone (dramatic/tense/hopeful/melancholic/etc)",
+    "cameraWork": "Camera technique (Wide establishing shot/Medium tracking shot/Close-up/etc)"
+  }
+]
+
+Focus on:
+- Cinematic quality and professional lighting
+- Emotional depth and character expressions
+- Atmospheric details (weather, time of day, environment)
+- Camera movements and compositions
+- 4K/8K quality, film grain, color grading
+
+Return ONLY the JSON array, no other text.`
+        }]
+      });
+
+      const content = message.content[0];
+      if (content.type !== 'text') {
+        throw new Error("Unexpected response type");
+      }
+
+      try {
+        const jsonMatch = content.text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const prompts = JSON.parse(jsonMatch[0]);
+          res.json({ prompts });
+        } else {
+          throw new Error("No JSON array found in response");
+        }
+      } catch (parseError) {
+        // Fallback: generate basic prompts from the summary
+        const sentences = chapterSummary.split(/[.!?]+/).filter((s: string) => s.trim().length > 10).slice(0, 3);
+        const fallbackPrompts = sentences.map((sentence: string, idx: number) => ({
+          sceneNumber: idx + 1,
+          lineReference: sentence.trim().substring(0, 100),
+          visualPrompt: `Cinematic shot: ${sentence.trim()}. Professional lighting, dramatic atmosphere, 4K quality, shallow depth of field.`,
+          mood: "dramatic",
+          cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up"
+        }));
+        res.json({ prompts: fallbackPrompts });
+      }
+    } catch (error) {
+      console.error("Error generating scene prompts:", error);
+      // Return fallback prompts on error
+      const { chapterSummary } = req.body;
+      const sentences = (chapterSummary || "").split(/[.!?]+/).filter((s: string) => s.trim().length > 10).slice(0, 3);
+      const fallbackPrompts = sentences.map((sentence: string, idx: number) => ({
+        sceneNumber: idx + 1,
+        lineReference: sentence.trim().substring(0, 100),
+        visualPrompt: `Cinematic shot: ${sentence.trim()}. Professional lighting, 4K quality.`,
+        mood: "dramatic",
+        cameraWork: idx === 0 ? "Wide shot" : idx === 1 ? "Medium shot" : "Close-up"
+      }));
+      res.json({ prompts: fallbackPrompts });
+    }
+  });
+
   app.post("/api/generate-chapters-stream", async (req, res) => {
     try {
       const { title, framework, chapterCount, wordsPerChapter, filmMode } = req.body;

@@ -1,61 +1,37 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Film, Mic, Hash, Video, BookOpen, Monitor, Check, Clapperboard, FileText } from "lucide-react";
+import { Loader2, Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Zap, Play, BookOpen, FileText, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { NARRATOR_VOICES, VIDEO_MODELS, FRAME_SIZES, FILM_MODES, type FilmMode } from "@shared/schema";
-
-const FILM_MODE_INFO: Record<FilmMode, { label: string; description: string; chapters: number; words: number }> = {
-  "short_film": { 
-    label: "Short Film", 
-    description: "A compact 5-chapter narrative with quick pacing. Perfect for testing ideas or creating short content.",
-    chapters: 5,
-    words: 500
-  },
-  "hollywood_screenplay": { 
-    label: "Hollywood Screenplay", 
-    description: "Full 18-chapter cinematic structure following professional screenplay format. Includes Hook, Introduction, Development, Plot Twist, Climax, and Resolution phases.",
-    chapters: 18,
-    words: 800
-  }
-};
-
-const NARRATOR_VOICE_LABELS: Record<string, string> = {
-  "male-narrator": "Male Narrator",
-  "female-narrator": "Female Narrator",
-  "dramatic-male": "Dramatic Male",
-  "dramatic-female": "Dramatic Female",
-  "neutral": "Neutral Voice",
-  "documentary": "Documentary Style"
-};
-
-const VIDEO_MODEL_LABELS: Record<string, { label: string; quality: string }> = {
-  "kling_21": { label: "Kling 2.1", quality: "Free - Fast" },
-  "kling_25": { label: "Kling 2.5 Pro", quality: "Premium" },
-  "higgsfield_v1": { label: "Higgsfield", quality: "Free" },
-  "seedance": { label: "Seedance", quality: "Free - Fast" },
-  "ltxv-13b": { label: "LTX-Video 13B", quality: "Free" },
-  "veo_3": { label: "Veo 3", quality: "Premium" },
-  "veo_31": { label: "Veo 3.1", quality: "Premium" },
-  "hailuo_2": { label: "Hailuo 2", quality: "Premium" },
-  "sora_2": { label: "Sora 2", quality: "Premium" }
-};
-
-const FRAME_SIZE_LABELS: Record<string, { label: string; resolution: string }> = {
-  "720p": { label: "HD", resolution: "1280x720" },
-  "1080p": { label: "Full HD", resolution: "1920x1080" },
-  "4K": { label: "4K Ultra HD", resolution: "3840x2160" }
-};
 
 interface Framework {
   genres: string[];
   premise: string;
   hook: string;
+  tone?: string;
+  setting?: {
+    location: string;
+    time: string;
+    weather: string;
+    atmosphere: string;
+  };
+  characters?: Array<{
+    name: string;
+    age: number;
+    role: string;
+    description: string;
+    actor?: string;
+  }>;
+}
+
+interface ScenePrompt {
+  sceneNumber: number;
+  lineReference: string;
+  visualPrompt: string;
+  mood: string;
+  cameraWork: string;
 }
 
 interface Chapter {
@@ -63,27 +39,33 @@ interface Chapter {
   title: string;
   summary: string;
   prompt: string;
+  scenePrompts?: ScenePrompt[];
 }
+
+type MovieLength = "9" | "18" | "custom";
 
 export default function CreateFilm() {
   const [title, setTitle] = useState("");
   const [framework, setFramework] = useState<Framework | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [isGeneratingFramework, setIsGeneratingFramework] = useState(false);
-  const [isGeneratingChapters, setIsGeneratingChapters] = useState(false);
-  const [currentGeneratingChapter, setCurrentGeneratingChapter] = useState(0);
-  const [isGeneratingFilm, setIsGeneratingFilm] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState<"idle" | "framework" | "chapters" | "prompts" | "complete">("idle");
+  const [currentChapter, setCurrentChapter] = useState(0);
+  const [currentPromptChapter, setCurrentPromptChapter] = useState(0);
   
-  const [filmMode, setFilmMode] = useState<FilmMode>("short_film");
-  const [narratorVoice, setNarratorVoice] = useState("male-narrator");
-  const [chapterCount, setChapterCount] = useState(5);
-  const [wordsPerChapter, setWordsPerChapter] = useState(500);
-  const [videoModel, setVideoModel] = useState("kling_21");
-  const [frameSize, setFrameSize] = useState("1080p");
+  const [movieLength, setMovieLength] = useState<MovieLength>("9");
+  const [customChapters, setCustomChapters] = useState(9);
+  const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
+  const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
+
+  const getChapterCount = () => {
+    if (movieLength === "9") return 9;
+    if (movieLength === "18") return 18;
+    return customChapters;
+  };
 
   const toggleChapterExpand = (chapterNumber: number) => {
     setExpandedChapters(prev => {
@@ -97,69 +79,112 @@ export default function CreateFilm() {
     });
   };
 
-  const handleFilmModeChange = (mode: FilmMode) => {
-    setFilmMode(mode);
-    const modeInfo = FILM_MODE_INFO[mode];
-    setChapterCount(modeInfo.chapters);
-    setWordsPerChapter(modeInfo.words);
-    if (chapters.length > 0) setChapters([]);
+  const handleCopy = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedItems(prev => new Set(prev).add(id));
+    setTimeout(() => {
+      setCopiedItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }, 2000);
   };
 
-  const handleGenerateFramework = async () => {
-    if (!title || title.length < 3) return;
-    setIsGeneratingFramework(true);
-    setChapters([]);
-    
+  const generateScenePrompts = async (chapter: Chapter): Promise<ScenePrompt[]> => {
     try {
-      const response = await fetch("/api/generate-framework", {
+      const response = await fetch("/api/generate-scene-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, filmMode })
+        body: JSON.stringify({
+          chapterTitle: chapter.title,
+          chapterSummary: chapter.summary,
+          chapterNumber: chapter.chapterNumber
+        })
       });
 
-      if (!response.ok) throw new Error("Failed to generate framework");
-      
+      if (!response.ok) {
+        const lines = chapter.summary.split(/[.!?]+/).filter(l => l.trim().length > 10).slice(0, 3);
+        return lines.map((line, idx) => ({
+          sceneNumber: idx + 1,
+          lineReference: line.trim().substring(0, 100) + "...",
+          visualPrompt: `Cinematic shot: ${line.trim()}. Professional lighting, 4K quality, dramatic atmosphere.`,
+          mood: "dramatic",
+          cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up with shallow depth of field"
+        }));
+      }
+
       const data = await response.json();
-      setFramework({
-        genres: data.genres || [data.genre],
-        premise: data.premise,
-        hook: data.hook
-      });
-      
-      toast({ title: "Framework Generated!", description: "Configure settings and generate chapters." });
+      return data.prompts || [];
     } catch (error) {
-      console.error("Error generating framework:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to generate framework" });
-    } finally {
-      setIsGeneratingFramework(false);
+      const lines = chapter.summary.split(/[.!?]+/).filter(l => l.trim().length > 10).slice(0, 3);
+      return lines.map((line, idx) => ({
+        sceneNumber: idx + 1,
+        lineReference: line.trim().substring(0, 100) + "...",
+        visualPrompt: `Cinematic shot: ${line.trim()}. Professional lighting, 4K quality, dramatic atmosphere.`,
+        mood: "dramatic",
+        cameraWork: idx === 0 ? "Wide establishing shot" : idx === 1 ? "Medium tracking shot" : "Close-up with shallow depth of field"
+      }));
     }
   };
 
-  const handleGenerateChapters = async () => {
-    if (!title || !framework) return;
-    setIsGeneratingChapters(true);
+  const handleGenerate = async () => {
+    if (!title || title.length < 3) {
+      toast({ variant: "destructive", title: "Error", description: "Please enter a movie title (at least 3 characters)" });
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationPhase("framework");
+    setFramework(null);
     setChapters([]);
-    setCurrentGeneratingChapter(0);
-    
+    setExpandedChapters(new Set());
+
     try {
-      const response = await fetch("/api/generate-chapters-stream", {
+      const frameworkResponse = await fetch("/api/generate-framework", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, filmMode: "short_film" })
+      });
+
+      if (!frameworkResponse.ok) throw new Error("Failed to generate framework");
+      
+      const frameworkData = await frameworkResponse.json();
+      setFramework({
+        genres: frameworkData.genres || [frameworkData.genre],
+        premise: frameworkData.premise,
+        hook: frameworkData.hook,
+        tone: frameworkData.tone,
+        setting: frameworkData.setting,
+        characters: frameworkData.characters
+      });
+
+      setGenerationPhase("chapters");
+
+      const chaptersResponse = await fetch("/api/generate-chapters-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           title, 
-          framework,
-          filmMode,
-          chapterCount,
-          wordsPerChapter
+          framework: {
+            genres: frameworkData.genres || [frameworkData.genre],
+            premise: frameworkData.premise,
+            hook: frameworkData.hook
+          },
+          filmMode: "short_film",
+          chapterCount: getChapterCount(),
+          wordsPerChapter: 500
         })
       });
 
-      if (!response.ok) throw new Error("Failed to start chapter generation");
+      if (!chaptersResponse.ok) throw new Error("Failed to start chapter generation");
       
-      const reader = response.body?.getReader();
+      const reader = chaptersResponse.body?.getReader();
       const decoder = new TextDecoder();
       
       if (!reader) throw new Error("No reader available");
+      
+      const generatedChapters: Chapter[] = [];
       
       while (true) {
         const { done, value } = await reader.read();
@@ -174,13 +199,12 @@ export default function CreateFilm() {
               const data = JSON.parse(line.slice(6));
               
               if (data.type === 'generating') {
-                setCurrentGeneratingChapter(data.chapterNumber);
+                setCurrentChapter(data.chapterNumber);
               } else if (data.type === 'chapter') {
-                setChapters(prev => [...prev, data.chapter]);
+                generatedChapters.push(data.chapter);
+                setChapters([...generatedChapters]);
               } else if (data.type === 'complete') {
-                toast({ title: "Chapters Generated!", description: `All ${data.totalChapters} chapters are ready.` });
-              } else if (data.type === 'error') {
-                console.error("Chapter generation error:", data);
+                // Chapters done
               }
             } catch (e) {
               // Skip invalid JSON
@@ -188,21 +212,32 @@ export default function CreateFilm() {
           }
         }
       }
+
+      setGenerationPhase("prompts");
+      
+      for (let i = 0; i < generatedChapters.length; i++) {
+        setCurrentPromptChapter(i + 1);
+        const prompts = await generateScenePrompts(generatedChapters[i]);
+        generatedChapters[i].scenePrompts = prompts;
+        setChapters([...generatedChapters]);
+      }
+
+      setGenerationPhase("complete");
+      toast({ title: "Generation Complete!", description: `Created ${generatedChapters.length} chapters with scene prompts.` });
+
     } catch (error) {
-      console.error("Error generating chapters:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to generate chapters" });
+      console.error("Error generating:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to generate content" });
+      setGenerationPhase("idle");
     } finally {
-      setIsGeneratingChapters(false);
-      setCurrentGeneratingChapter(0);
+      setIsGenerating(false);
     }
   };
 
-  const handleGenerateFilm = async () => {
-    if (!title || !framework || chapters.length === 0) return;
-    setIsGeneratingFilm(true);
-    
+  const handleStartFilm = async () => {
+    if (!framework || chapters.length === 0) return;
+
     try {
-      // Step 1: Create the film with idle stage
       const filmResponse = await fetch("/api/films", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,36 +245,35 @@ export default function CreateFilm() {
           title, 
           status: "draft",
           generationStage: "idle",
-          filmMode,
-          narratorVoice,
+          filmMode: "short_film",
+          narratorVoice: "male-narrator",
           storyLength: "custom",
           chapterCount: chapters.length,
-          wordsPerChapter,
-          videoModel,
-          frameSize
+          wordsPerChapter: 500,
+          videoModel: "nanobanana-video",
+          frameSize: "1080p"
         })
       });
 
       if (!filmResponse.ok) throw new Error("Failed to create film");
       const film = await filmResponse.json();
 
-      // Step 2: Save the framework to the database
-      const frameworkResponse = await fetch(`/api/films/${film.id}/framework`, {
+      await fetch(`/api/films/${film.id}/framework`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...framework,
-          genre: framework.genres?.join(", ") || "Drama"
+          premise: framework.premise,
+          hook: framework.hook,
+          genres: framework.genres,
+          tone: framework.tone || "dramatic",
+          themes: ["drama"],
+          setting: framework.setting || { location: "Unknown", time: "Present", weather: "Clear", atmosphere: "Dramatic" },
+          characters: framework.characters || []
         })
       });
-      
-      if (!frameworkResponse.ok) {
-        console.error("Failed to save framework, continuing anyway");
-      }
 
-      // Step 3: Save each chapter to the database (must complete before starting pipeline)
-      const chapterSavePromises = chapters.map(async (chapter) => {
-        const chapterResponse = await fetch(`/api/films/${film.id}/chapters`, {
+      await Promise.all(chapters.map(chapter => 
+        fetch(`/api/films/${film.id}/chapters`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -247,354 +281,392 @@ export default function CreateFilm() {
             title: chapter.title,
             summary: chapter.summary,
             prompt: chapter.prompt,
+            scenePrompts: chapter.scenePrompts?.map(sp => sp.visualPrompt) || [],
             status: "pending"
           })
-        });
-        
-        if (!chapterResponse.ok) {
-          console.error(`Failed to save chapter ${chapter.chapterNumber}`);
-          throw new Error(`Failed to save chapter ${chapter.chapterNumber}`);
-        }
-        return chapterResponse.json();
-      });
-      
-      // Wait for ALL chapters to be saved before continuing
-      await Promise.all(chapterSavePromises);
-      console.log(`All ${chapters.length} chapters saved to database`);
+        })
+      ));
 
-      // Step 4: Start the generation pipeline
-      const startResponse = await fetch(`/api/films/${film.id}/start-generation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
+      await fetch(`/api/films/${film.id}/start-generation`, { method: "POST" });
       
-      if (!startResponse.ok) {
-        console.error("Failed to start generation");
-      }
-
-      toast({ title: "Film Creation Started!", description: "Generating videos for your film..." });
       setLocation(`/progress/${film.id}`);
     } catch (error) {
-      console.error("Error creating film:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to create film" });
-      setIsGeneratingFilm(false);
+      console.error("Error starting film:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to start film generation" });
     }
   };
 
-  const chaptersComplete = chapters.length === chapterCount && !isGeneratingChapters;
-
   return (
-    <div className="py-8 space-y-6 max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Create Your Film</h1>
-        <p className="text-muted-foreground">Enter a title and generate your story</p>
-      </div>
-
-      <GlassCard className="p-6">
-        <Label className="text-sm font-medium mb-3 flex items-center gap-2">
-          <Clapperboard className="w-4 h-4 text-primary" /> Film Mode
-        </Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {FILM_MODES.map((mode) => {
-            const info = FILM_MODE_INFO[mode];
-            const isSelected = filmMode === mode;
-            return (
-              <button
-                key={mode}
-                onClick={() => handleFilmModeChange(mode)}
-                disabled={isGeneratingChapters || isGeneratingFramework}
-                data-testid={`button-mode-${mode}`}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
-                  isSelected 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-border hover:border-primary/50 bg-background/50'
-                } ${isGeneratingChapters || isGeneratingFramework ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  {mode === 'short_film' ? (
-                    <FileText className={`w-5 h-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                  ) : (
-                    <Film className={`w-5 h-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                  )}
-                  <span className={`font-semibold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                    {info.label}
-                  </span>
-                  {isSelected && (
-                    <Check className="w-4 h-4 text-primary ml-auto" />
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mb-2">
-                  {info.description}
-                </p>
-                <div className="text-xs text-muted-foreground">
-                  {info.chapters} chapters · ~{info.words} words each
-                </div>
-              </button>
-            );
-          })}
+    <div className="min-h-screen p-6 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* Hero Header */}
+        <div className="text-center space-y-4 py-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/30 mb-4">
+            <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+            <span className="text-sm text-primary font-medium">AI-Powered Cinema</span>
+          </div>
+          <h1 className="text-4xl md:text-6xl font-display font-bold neon-gradient" data-testid="page-title">
+            Create Your Film
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Enter your movie title and watch AI craft a complete screenplay with cinematic scene prompts
+          </p>
         </div>
-      </GlassCard>
 
-      <GlassCard className="p-6">
-        <Label className="text-sm font-medium mb-2 flex items-center gap-2">
-          <Film className="w-4 h-4 text-primary" /> Film Title
-        </Label>
-        <div className="flex gap-3">
-          <Input 
-            placeholder="e.g. The Wolf Has No Friend" 
-            className="flex-1"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            data-testid="input-film-title"
-          />
-          <Button 
-            onClick={handleGenerateFramework}
-            disabled={isGeneratingFramework || !title || title.length < 3}
-            data-testid="button-generate-framework"
-          >
-            {isGeneratingFramework ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
-            ) : (
-              <><Sparkles className="mr-2 h-4 w-4" /> Generate Framework</>
-            )}
-          </Button>
-        </div>
-      </GlassCard>
-
-      {framework && (
-        <>
-          <GlassCard className="p-6">
-            <div className="space-y-6">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Title</p>
-                <h2 className="text-2xl font-bold text-foreground">{title}</h2>
-              </div>
-              
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Genres</p>
-                <div className="space-y-1">
-                  {framework.genres.map((genre, index) => (
-                    <p key={index} className="text-foreground">{genre}</p>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Premise</p>
-                <p className="text-foreground leading-relaxed">{framework.premise}</p>
-              </div>
-              
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Hook</p>
-                <p className="text-foreground leading-relaxed">{framework.hook}</p>
-              </div>
-            </div>
-          </GlassCard>
-
-          <GlassCard className="p-6">
-            <h2 className="text-xl font-bold mb-4">Generation Settings</h2>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <Label className="text-sm flex items-center gap-2 mb-2">
-                  <Mic className="w-4 h-4 text-primary" /> Narrator Voice
-                </Label>
-                <Select value={narratorVoice} onValueChange={setNarratorVoice}>
-                  <SelectTrigger data-testid="select-narrator-voice">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NARRATOR_VOICES.map((voice) => (
-                      <SelectItem key={voice} value={voice}>{NARRATOR_VOICE_LABELS[voice]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm flex items-center gap-2 mb-2">
-                  <Video className="w-4 h-4 text-primary" /> Video Model
-                </Label>
-                <Select value={videoModel} onValueChange={setVideoModel}>
-                  <SelectTrigger data-testid="select-video-model">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VIDEO_MODELS.map((model) => (
-                      <SelectItem key={model} value={model}>
-                        {VIDEO_MODEL_LABELS[model].label} - {VIDEO_MODEL_LABELS[model].quality}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm flex items-center gap-2 mb-2">
-                  <Monitor className="w-4 h-4 text-primary" /> Frame Size
-                </Label>
-                <Select value={frameSize} onValueChange={setFrameSize}>
-                  <SelectTrigger data-testid="select-frame-size">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FRAME_SIZES.map((size) => (
-                      <SelectItem key={size} value={size}>
-                        {FRAME_SIZE_LABELS[size].label} - {FRAME_SIZE_LABELS[size].resolution}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {filmMode === "short_film" ? (
-              <div className="grid gap-4 md:grid-cols-2 mt-4">
-                <div>
-                  <Label className="text-sm flex items-center gap-2 mb-2">
-                    <Hash className="w-4 h-4 text-primary" /> Chapters: {chapterCount}
-                  </Label>
-                  <Slider
-                    value={[chapterCount]}
-                    onValueChange={(value) => {
-                      setChapterCount(value[0]);
-                      if (chapters.length > 0) setChapters([]);
-                    }}
-                    min={1}
-                    max={18}
-                    step={1}
-                    disabled={isGeneratingChapters}
-                    data-testid="slider-chapter-count"
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-sm flex items-center gap-2 mb-2">
-                    <BookOpen className="w-4 h-4 text-primary" /> Words/Chapter: {wordsPerChapter}
-                  </Label>
-                  <Slider
-                    value={[wordsPerChapter]}
-                    onValueChange={(value) => {
-                      setWordsPerChapter(value[0]);
-                      if (chapters.length > 0) setChapters([]);
-                    }}
-                    min={100}
-                    max={1000}
-                    step={50}
-                    disabled={isGeneratingChapters}
-                    data-testid="slider-words-per-chapter"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clapperboard className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-foreground">Hollywood Screenplay Structure</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  18 chapters following professional screenplay format: Hook → Introduction (3) → Inciting Incident → Development (6) → Plot Twist → Climax Build (3) → Climax → Resolution (2)
-                </p>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Target: ~15,000-16,000 total words
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 text-sm text-muted-foreground">
-              {chapterCount} chapters × ~{wordsPerChapter} words = ~{(chapterCount * wordsPerChapter).toLocaleString()} total words
-            </div>
-
-            {chapters.length === 0 && (
-              <div className="mt-6 text-center">
-                <Button 
-                  size="lg"
-                  onClick={handleGenerateChapters}
-                  disabled={isGeneratingChapters}
-                  className="px-8"
-                  data-testid="button-generate-chapters"
-                >
-                  {isGeneratingChapters ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Generating Chapter {currentGeneratingChapter}...</>
-                  ) : (
-                    <><Sparkles className="mr-2 h-5 w-5" /> Generate Chapters</>
-                  )}
-                </Button>
-              </div>
-            )}
-          </GlassCard>
-
-          {(chapters.length > 0 || isGeneratingChapters) && (
-            <GlassCard className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Chapters</h2>
-                <span className="text-sm text-muted-foreground">
-                  {chapters.length} / {chapterCount} generated
-                </span>
-              </div>
-              
-              <div className="space-y-4">
-                {chapters.map((chapter) => (
-                  <div 
-                    key={chapter.chapterNumber} 
-                    className="border border-border rounded-lg p-4"
-                    data-testid={`chapter-card-${chapter.chapterNumber}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                        <Check className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-foreground">
-                          Chapter {chapter.chapterNumber}: {chapter.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
-                          {chapter.summary}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {isGeneratingChapters && currentGeneratingChapter > 0 && (
-                  <div className="border border-border rounded-lg p-4 animate-pulse">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-muted-foreground">
-                          Generating Chapter {currentGeneratingChapter}...
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-2">
-                          Creating narrative content...
-                        </p>
-                      </div>
-                    </div>
+        {/* Main Input Section */}
+        <GlassCard className="p-8 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-secondary/5" />
+          
+          <div className="relative space-y-8">
+            {/* Title Input */}
+            <div className="space-y-4">
+              <label className="text-xl font-display font-semibold flex items-center gap-2">
+                <Film className="w-6 h-6 text-primary" />
+                Movie Title
+              </label>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Enter your movie title..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="text-2xl py-6 px-6 bg-background/50 border-2 border-border focus:border-primary transition-all duration-300 rounded-xl"
+                  data-testid="input-film-title"
+                />
+                {title && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Check className="w-5 h-5 text-green-500" />
                   </div>
                 )}
               </div>
-            </GlassCard>
-          )}
+            </div>
 
-          {chaptersComplete && (
-            <div className="text-center">
-              <Button 
+            {/* Movie Length Selector */}
+            <div className="space-y-4">
+              <label className="text-xl font-display font-semibold flex items-center gap-2">
+                <BookOpen className="w-6 h-6 text-secondary" />
+                Movie Length
+              </label>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 9 Chapters */}
+                <button
+                  onClick={() => setMovieLength("9")}
+                  className={`group relative p-6 rounded-xl border-2 transition-all duration-300 ${
+                    movieLength === "9" 
+                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
+                      : "border-border hover:border-primary/50 bg-background/30"
+                  }`}
+                  data-testid="btn-length-9"
+                >
+                  <div className="text-center space-y-2">
+                    <div className="text-4xl font-display font-bold text-primary">9</div>
+                    <div className="text-sm font-medium">Chapters</div>
+                    <div className="text-xs text-muted-foreground">Short Film (~45 min)</div>
+                  </div>
+                  {movieLength === "9" && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="w-4 h-4 text-black" />
+                    </div>
+                  )}
+                </button>
+
+                {/* 18 Chapters */}
+                <button
+                  onClick={() => setMovieLength("18")}
+                  className={`group relative p-6 rounded-xl border-2 transition-all duration-300 ${
+                    movieLength === "18" 
+                      ? "border-secondary bg-secondary/10 shadow-lg shadow-secondary/20" 
+                      : "border-border hover:border-secondary/50 bg-background/30"
+                  }`}
+                  data-testid="btn-length-18"
+                >
+                  <div className="text-center space-y-2">
+                    <div className="text-4xl font-display font-bold text-secondary">18</div>
+                    <div className="text-sm font-medium">Chapters</div>
+                    <div className="text-xs text-muted-foreground">Feature Film (~90 min)</div>
+                  </div>
+                  {movieLength === "18" && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-secondary rounded-full flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </button>
+
+                {/* Custom */}
+                <button
+                  onClick={() => setMovieLength("custom")}
+                  className={`group relative p-6 rounded-xl border-2 transition-all duration-300 ${
+                    movieLength === "custom" 
+                      ? "border-primary bg-gradient-to-br from-primary/10 to-secondary/10 shadow-lg" 
+                      : "border-border hover:border-primary/50 bg-background/30"
+                  }`}
+                  data-testid="btn-length-custom"
+                >
+                  <div className="text-center space-y-2">
+                    {movieLength === "custom" ? (
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={customChapters}
+                        onChange={(e) => setCustomChapters(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-20 text-4xl font-display font-bold text-center bg-transparent border-b-2 border-primary focus:outline-none"
+                        data-testid="input-custom-chapters"
+                      />
+                    ) : (
+                      <div className="text-4xl font-display font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">?</div>
+                    )}
+                    <div className="text-sm font-medium">Custom</div>
+                    <div className="text-xs text-muted-foreground">Your choice</div>
+                  </div>
+                  {movieLength === "custom" && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <div className="flex justify-center pt-4">
+              <Button
                 size="lg"
-                onClick={handleGenerateFilm}
-                disabled={isGeneratingFilm}
-                className="px-8"
-                data-testid="button-generate-film"
+                onClick={handleGenerate}
+                disabled={isGenerating || !title || title.length < 3}
+                className="px-12 py-6 text-lg font-display font-semibold bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all duration-300 rounded-xl relative overflow-hidden group"
+                data-testid="button-generate"
               >
-                {isGeneratingFilm ? (
-                  <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting Film Generation...</>
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/50 to-secondary/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl" />
+                <span className="relative flex items-center gap-2">
+                  {isGenerating ? (
+                    <>
+                      <div className="cyber-spinner w-5 h-5" />
+                      {generationPhase === "framework" && "Generating Framework..."}
+                      {generationPhase === "chapters" && `Writing Chapter ${currentChapter}...`}
+                      {generationPhase === "prompts" && `Creating Scene Prompts ${currentPromptChapter}/${chapters.length}...`}
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-5 h-5" />
+                      Generate Movie
+                    </>
+                  )}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* Framework Display */}
+        {framework && (
+          <GlassCard className="p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-display font-bold flex items-center gap-2">
+                <Zap className="w-6 h-6 text-primary" />
+                Story Framework
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleCopy(`${framework.premise}\n\n${framework.hook}`, "framework")}
+                className="gap-2"
+              >
+                {copiedItems.has("framework") ? (
+                  <><Check className="w-4 h-4 text-green-500" /> Copied!</>
                 ) : (
-                  <><Film className="mr-2 h-5 w-5" /> Generate Film</>
+                  <><Copy className="w-4 h-4" /> Copy</>
                 )}
               </Button>
             </div>
-          )}
-        </>
-      )}
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Genres */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Genres</h3>
+                <div className="flex flex-wrap gap-2">
+                  {framework.genres.map((genre, idx) => (
+                    <span key={idx} className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-sm">
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tone */}
+              {framework.tone && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider">Tone</h3>
+                  <p className="text-foreground">{framework.tone}</p>
+                </div>
+              )}
+
+              {/* Premise */}
+              <div className="md:col-span-2 space-y-2">
+                <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Premise</h3>
+                <p className="text-foreground leading-relaxed">{framework.premise}</p>
+              </div>
+
+              {/* Hook */}
+              <div className="md:col-span-2 space-y-2 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider">Hook</h3>
+                <p className="text-foreground leading-relaxed italic">{framework.hook}</p>
+              </div>
+
+              {/* Characters */}
+              {framework.characters && framework.characters.length > 0 && (
+                <div className="md:col-span-2 space-y-3">
+                  <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Characters</h3>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {framework.characters.map((char, idx) => (
+                      <div key={idx} className="p-3 rounded-lg bg-background/50 border border-border">
+                        <div className="font-semibold text-primary">{char.name}</div>
+                        <div className="text-xs text-muted-foreground">{char.role} • Age {char.age}</div>
+                        {char.actor && <div className="text-xs text-secondary mt-1">Cast: {char.actor}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        )}
+
+        {/* Chapters Display */}
+        {chapters.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-display font-bold flex items-center gap-2">
+                <FileText className="w-6 h-6 text-secondary" />
+                Chapters
+                <span className="text-lg text-muted-foreground">({chapters.length}/{getChapterCount()})</span>
+              </h2>
+            </div>
+
+            <div className="space-y-4">
+              {chapters.map((chapter) => (
+                <GlassCard 
+                  key={chapter.chapterNumber} 
+                  className="overflow-hidden animate-in fade-in slide-in-from-left-4 duration-300"
+                  style={{ animationDelay: `${chapter.chapterNumber * 50}ms` }}
+                >
+                  {/* Chapter Header */}
+                  <div 
+                    className="p-4 cursor-pointer flex items-center justify-between hover:bg-white/5 transition-colors"
+                    onClick={() => toggleChapterExpand(chapter.chapterNumber)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-display font-bold">
+                        {chapter.chapterNumber}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">{chapter.title}</h3>
+                        <p className="text-sm text-muted-foreground line-clamp-1">{chapter.summary.substring(0, 100)}...</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {chapter.scenePrompts && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">
+                          {chapter.scenePrompts.length} scenes
+                        </span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopy(chapter.summary, `chapter-${chapter.chapterNumber}`);
+                        }}
+                      >
+                        {copiedItems.has(`chapter-${chapter.chapterNumber}`) ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </Button>
+                      {expandedChapters.has(chapter.chapterNumber) ? (
+                        <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded Content */}
+                  {expandedChapters.has(chapter.chapterNumber) && (
+                    <div className="px-4 pb-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                      {/* Full Summary */}
+                      <div className="p-4 rounded-lg bg-background/50 border border-border">
+                        <h4 className="text-sm font-semibold text-primary mb-2">Full Summary</h4>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{chapter.summary}</p>
+                      </div>
+
+                      {/* Scene Prompts */}
+                      {chapter.scenePrompts && chapter.scenePrompts.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-semibold text-secondary uppercase tracking-wider">Scene Prompts</h4>
+                          {chapter.scenePrompts.map((scene) => (
+                            <div 
+                              key={scene.sceneNumber}
+                              className="p-4 rounded-lg bg-gradient-to-r from-secondary/10 to-primary/10 border border-secondary/20"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded bg-secondary/30 text-xs font-medium">
+                                      Scene {scene.sceneNumber}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">{scene.cameraWork}</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground italic">"{scene.lineReference}"</p>
+                                  <p className="text-sm text-foreground">{scene.visualPrompt}</p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleCopy(scene.visualPrompt, `scene-${chapter.chapterNumber}-${scene.sceneNumber}`)}
+                                  className="shrink-0"
+                                >
+                                  {copiedItems.has(`scene-${chapter.chapterNumber}-${scene.sceneNumber}`) ? (
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </GlassCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Start Film Button */}
+        {generationPhase === "complete" && chapters.length > 0 && (
+          <div className="flex justify-center py-8 animate-in fade-in zoom-in duration-500">
+            <Button
+              size="lg"
+              onClick={handleStartFilm}
+              className="px-16 py-8 text-xl font-display font-bold bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 transition-all duration-300 rounded-2xl shadow-2xl shadow-green-500/30 relative overflow-hidden group"
+              data-testid="button-start-film"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-green-400/50 to-emerald-500/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl" />
+              <span className="relative flex items-center gap-3">
+                <Play className="w-6 h-6" />
+                Start Film Generation
+              </span>
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText, Maximize2, Minimize2, X, Terminal, Cpu } from "lucide-react";
+import { Sparkles, Film, Copy, Check, ChevronDown, ChevronUp, Wand2, Bot, Loader2, BookOpen, Zap, FileText, Maximize2, Minimize2, X, Terminal, Cpu, Dice5, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ActivityMessage {
@@ -66,6 +66,8 @@ export default function CreateFilm() {
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [suggestedTitles, setSuggestedTitles] = useState<string[]>([]);
 
   const wordOptions = [
     { value: 300, label: "300", description: "Quick" },
@@ -130,6 +132,34 @@ export default function CreateFilm() {
         return newSet;
       });
     }, 2000);
+  };
+
+  const generateTitle = async () => {
+    setIsGeneratingTitle(true);
+    setSuggestedTitles([]);
+    
+    try {
+      const response = await fetch("/api/generate-title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      
+      if (!response.ok) throw new Error("Failed to generate titles");
+      
+      const data = await response.json();
+      setSuggestedTitles(data.titles || []);
+      
+      // Auto-select first title
+      if (data.titles && data.titles.length > 0) {
+        setTitle(data.titles[0]);
+      }
+    } catch (error) {
+      console.error("Error generating titles:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to generate titles" });
+    } finally {
+      setIsGeneratingTitle(false);
+    }
   };
 
   const generateScenePrompts = async (chapter: Chapter, currentFramework: Framework | null): Promise<ScenePrompt[]> => {
@@ -507,15 +537,48 @@ export default function CreateFilm() {
           <Film className="w-4 h-4 text-primary" />
           Title
         </label>
-        <Input
-          type="text"
-          placeholder="Movie title..."
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={isGenerating}
-          className="bg-background/50 border border-border focus:border-primary"
-          data-testid="input-film-title"
-        />
+        <div className="flex gap-1">
+          <Input
+            type="text"
+            placeholder="Movie title..."
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isGenerating || isGeneratingTitle}
+            className="flex-1 bg-background/50 border border-border focus:border-primary"
+            data-testid="input-film-title"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={generateTitle}
+            disabled={isGenerating || isGeneratingTitle}
+            className="px-2 border border-secondary/30 hover:bg-secondary/10"
+            data-testid="btn-generate-title-compact"
+          >
+            {isGeneratingTitle ? (
+              <Loader2 className="w-4 h-4 animate-spin text-secondary" />
+            ) : (
+              <Dice5 className="w-4 h-4 text-secondary" />
+            )}
+          </Button>
+        </div>
+        {suggestedTitles.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {suggestedTitles.slice(0, 3).map((t, idx) => (
+              <button
+                key={idx}
+                onClick={() => setTitle(t)}
+                className={`px-2 py-0.5 rounded text-xs transition-all ${
+                  title === t 
+                    ? "bg-secondary/20 border border-secondary text-secondary" 
+                    : "bg-background/30 border border-border hover:border-secondary/50"
+                }`}
+              >
+                {t.length > 18 ? t.slice(0, 18) + '...' : t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -627,15 +690,58 @@ export default function CreateFilm() {
                     <Film className="w-5 h-5 text-primary" />
                     Movie Title
                   </label>
-                  <Input
-                    type="text"
-                    placeholder="Enter your movie title..."
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    disabled={isGenerating}
-                    className="text-xl py-5 px-4 bg-background/50 border-2 border-border focus:border-primary transition-all rounded-xl"
-                    data-testid="input-film-title"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Enter your movie title..."
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      disabled={isGenerating || isGeneratingTitle}
+                      className="flex-1 text-xl py-5 px-4 bg-background/50 border-2 border-border focus:border-primary transition-all rounded-xl"
+                      data-testid="input-film-title"
+                    />
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={generateTitle}
+                      disabled={isGenerating || isGeneratingTitle}
+                      className="px-4 py-5 border-2 border-secondary/50 hover:border-secondary hover:bg-secondary/10 rounded-xl"
+                      data-testid="btn-generate-title"
+                    >
+                      {isGeneratingTitle ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-secondary" />
+                      ) : (
+                        <Dice5 className="w-5 h-5 text-secondary" />
+                      )}
+                    </Button>
+                  </div>
+                  
+                  {/* Title Suggestions */}
+                  {suggestedTitles.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {suggestedTitles.map((t, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setTitle(t)}
+                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                            title === t 
+                              ? "bg-secondary/20 border border-secondary text-secondary" 
+                              : "bg-background/50 border border-border hover:border-secondary/50"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                      <button
+                        onClick={generateTitle}
+                        disabled={isGeneratingTitle}
+                        className="px-3 py-1.5 rounded-lg text-sm bg-background/30 border border-dashed border-muted-foreground/30 hover:border-secondary/50 text-muted-foreground flex items-center gap-1"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isGeneratingTitle ? 'animate-spin' : ''}`} />
+                        More
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Movie Length Selector */}

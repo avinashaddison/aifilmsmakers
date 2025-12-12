@@ -1833,6 +1833,55 @@ export async function registerRoutes(
     res.json(config);
   });
 
+  // Generate creative movie titles using AI
+  app.post("/api/generate-title", async (req, res) => {
+    try {
+      const { genre, mood, keywords } = req.body;
+      
+      const anthropic = new Anthropic();
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        messages: [{
+          role: "user",
+          content: `You are a Hollywood creative director generating compelling, evocative movie titles.
+
+Generate 5 unique, cinematic movie titles that would work for a major studio film.
+
+${genre ? `Preferred genre: ${genre}` : "Any genre"}
+${mood ? `Mood/tone: ${mood}` : ""}
+${keywords ? `Keywords/themes to incorporate: ${keywords}` : ""}
+
+Requirements:
+- Titles should be 2-6 words
+- Evocative and memorable
+- Could be drama, thriller, romance, sci-fi, or any compelling narrative
+- Mix of poetic, mysterious, dramatic styles
+- Think: "Eternal Sunshine of the Spotless Mind", "The Shawshank Redemption", "Inception", "Blade Runner", "A Beautiful Mind"
+
+Return ONLY a JSON array of 5 title strings, no other text:
+["Title One", "Title Two", "Title Three", "Title Four", "Title Five"]`
+        }]
+      });
+
+      const content = message.content[0];
+      if (content.type !== 'text') {
+        throw new Error("Unexpected response type");
+      }
+
+      const jsonMatch = content.text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const titles = JSON.parse(jsonMatch[0]);
+        res.json({ titles });
+      } else {
+        res.json({ titles: ["The Last Memory", "Echoes of Tomorrow", "Beneath the Surface", "The Silent Hour", "Fragments of Light"] });
+      }
+    } catch (error) {
+      console.error("Error generating titles:", error);
+      res.json({ titles: ["The Last Memory", "Echoes of Tomorrow", "Beneath the Surface", "The Silent Hour", "Fragments of Light"] });
+    }
+  });
+
   app.post("/api/generate-framework", async (req, res) => {
     try {
       const { title } = req.body;

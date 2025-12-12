@@ -62,9 +62,17 @@ export default function CreateFilm() {
   
   const [movieLength, setMovieLength] = useState<MovieLength>("9");
   const [customChapters, setCustomChapters] = useState(9);
+  const [wordsPerChapter, setWordsPerChapter] = useState<number>(500);
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const wordOptions = [
+    { value: 300, label: "300", description: "Quick" },
+    { value: 500, label: "500", description: "Standard" },
+    { value: 800, label: "800", description: "Detailed" },
+    { value: 1200, label: "1200", description: "Epic" },
+  ];
   
   const activityRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -229,6 +237,8 @@ export default function CreateFilm() {
 
       await new Promise(r => setTimeout(r, 300));
 
+      addActivity("info", `Target: ${wordsPerChapter} words per chapter (${chapterCount * wordsPerChapter} total words)`);
+      
       const chaptersResponse = await fetch("/api/generate-chapters-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,7 +251,7 @@ export default function CreateFilm() {
           },
           filmMode: "short_film",
           chapterCount,
-          wordsPerChapter: 500
+          wordsPerChapter
         })
       });
 
@@ -525,6 +535,29 @@ export default function CreateFilm() {
         ))}
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-semibold flex items-center gap-2">
+          <FileText className="w-4 h-4 text-yellow-400" />
+          Words/Chapter
+        </label>
+        <div className="grid grid-cols-4 gap-1">
+          {wordOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setWordsPerChapter(opt.value)}
+              disabled={isGenerating}
+              className={`p-1.5 rounded-lg border text-center text-xs transition-all ${
+                wordsPerChapter === opt.value 
+                  ? "border-yellow-400 bg-yellow-400/20 text-yellow-400" 
+                  : "border-border hover:border-yellow-400/50"
+              } ${isGenerating ? "opacity-50" : ""}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <Button
         size="lg"
         onClick={handleGenerate}
@@ -655,6 +688,47 @@ export default function CreateFilm() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Words Per Chapter Selector */}
+                <div className="space-y-2">
+                  <label className="text-lg font-display font-semibold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-yellow-400" />
+                    Words per Chapter
+                  </label>
+                  
+                  <div className="grid grid-cols-4 gap-3">
+                    {wordOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setWordsPerChapter(opt.value)}
+                        disabled={isGenerating}
+                        className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${
+                          wordsPerChapter === opt.value 
+                            ? "border-yellow-400 bg-yellow-400/10 shadow-lg shadow-yellow-400/20" 
+                            : "border-border hover:border-yellow-400/50 bg-background/30"
+                        } ${isGenerating ? "opacity-50 cursor-not-allowed" : ""}`}
+                        data-testid={`btn-words-${opt.value}`}
+                      >
+                        <div className="text-center">
+                          <div className={`text-xl font-display font-bold ${wordsPerChapter === opt.value ? "text-yellow-400" : ""}`}>
+                            {opt.label}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {opt.description}
+                          </div>
+                        </div>
+                        {wordsPerChapter === opt.value && (
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-black" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Total: ~{getChapterCount() * wordsPerChapter} words
+                  </p>
                 </div>
 
                 {/* Generate Button */}

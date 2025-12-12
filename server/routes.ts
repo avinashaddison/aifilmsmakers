@@ -1880,51 +1880,85 @@ ${framework.characters.map((c: any) => `- ${c.name}: ${c.description}${c.appeara
         max_tokens: 4000,
         messages: [{
           role: "user",
-          content: `You are an elite Hollywood cinematographer creating detailed visual prompts for AI video generation. Your prompts must be DEEP, CONSISTENT, and CINEMATIC.
+          content: `You are a MASTER CINEMATOGRAPHER and VISUAL STORYTELLER working on a $200 million Hollywood production. You create extraordinarily detailed visual prompts that rival the greatest films ever made.
 
-CHAPTER TO ANALYZE:
+CHAPTER TO TRANSFORM INTO VISUAL POETRY:
 Title: ${chapterTitle || `Chapter ${chapterNumber}`}
 Full Content: ${chapterSummary}
 ${characterContext}
 ${settingContext}
 
-TASK: Create 3-5 detailed scene prompts that break down this chapter into visual sequences.
+YOUR MISSION: Create 4-6 BREATHTAKING scene prompts that transform this chapter into pure visual cinema.
 
-For each scene, you MUST:
-1. Extract the EXACT line/moment from the chapter text
-2. Identify which characters appear and describe them consistently
-3. Describe the setting with rich environmental detail
-4. Create a comprehensive visual prompt (150+ words) including:
-   - Exact character positions, clothing, expressions, body language
-   - Lighting setup (key light, fill light, ambient, practical lights)
-   - Color palette and color grading style
-   - Camera angle, lens choice, depth of field
-   - Movement (character movement, camera movement)
-   - Atmospheric elements (dust particles, rain, fog, shadows)
-   - Time of day and weather consistency
-   - Emotional subtext and visual symbolism
+MANDATORY ELEMENTS FOR EACH SCENE (250+ words per visualPrompt):
 
-Return JSON array with this EXACT structure:
+1. OPENING FRAME COMPOSITION
+   - Exact aspect ratio feel (2.39:1 anamorphic widescreen)
+   - Rule of thirds positioning
+   - Leading lines and visual depth layers (foreground, midground, background)
+
+2. CHARACTER VISUALIZATION (if characters present)
+   - FULL physical description: exact height, build, posture, age markers
+   - Wardrobe details: fabric textures, colors, wear patterns, accessories
+   - Micro-expressions: specific facial muscle movements, eye moisture, lip tension
+   - Body language: weight distribution, hand positions, breathing patterns
+
+3. LIGHTING MASTERCLASS
+   - Key light: direction, intensity, color temperature (in Kelvin)
+   - Fill ratio and shadow density
+   - Rim/hair light placement
+   - Practical lights within the scene (lamps, candles, screens, windows)
+   - Atmospheric lighting (god rays, dust particles, lens flares)
+   - Color temperature contrast (warm vs cool zones)
+
+4. CINEMATOGRAPHY SPECIFICATIONS
+   - Lens choice: focal length (24mm, 35mm, 50mm, 85mm, etc.)
+   - Aperture/depth of field (shallow with creamy bokeh vs deep focus)
+   - Camera movement: dolly speed, crane arc, Steadicam flow, static locked-off
+   - Frame rate intention (24fps standard, 48fps smooth, 120fps slow-motion ready)
+
+5. ENVIRONMENTAL STORYTELLING
+   - Weather conditions and how they affect lighting
+   - Time of day with exact sky description
+   - Ambient sounds implied by the visual
+   - Textures: walls, floors, fabrics, skin, metal, wood grain
+   - Production design details: era-appropriate props, set decoration
+
+6. COLOR SCIENCE & GRADE
+   - Primary color palette (3 dominant colors with hex codes if possible)
+   - Film stock emulation (Kodak 5219, Fuji Eterna, ARRI LogC)
+   - LUT/grade style: teal-orange, tobacco-platinum, day-for-night
+   - Contrast ratio and black level
+   - Highlight treatment (soft roll-off vs harsh clipping)
+
+7. EMOTIONAL SUBTEXT
+   - What the viewer should FEEL looking at this frame
+   - Visual metaphors and symbolism
+   - Tension or release in the composition
+
+EXAMPLE SCENE PROMPT (study this level of detail):
+"WIDE ESTABLISHING SHOT - 2.39:1 anamorphic. A rain-soaked urban alleyway at 2:47 AM. DETECTIVE SARAH CHEN, 38, stands at frame-left third line, her 5'7" athletic frame draped in a charcoal wool overcoat, collar turned up, water droplets beading on the shoulders. Her East Asian features are half-shadowed, sharp cheekbones catching the blue-white spill from a failing sodium streetlamp above (3200K contaminated with 5600K). She holds a creased photograph at waist level, her left thumb absently tracing its edge - a self-soothing gesture she's unaware of. The key light is the streetlamp, harsh and top-down, creating raccoon shadows under her eyes. Fill comes from the ambient city glow reflecting off wet pavement, pushing cyan tones into the shadows (fill ratio 4:1). Behind her, the background falls into bokeh (shot at f/1.4 on a 50mm Cooke S4 anamorphic) - Christmas lights from a distant bar blur into oval orbs of red and gold. Rain falls at 45 degrees, backlit by a practical neon sign reading 'LUCKY FORTUNE' in pink and green. Steam rises from a subway grate at frame-right, adding layered depth. The ground is oil-slicked asphalt reflecting everything - creating a mirror-world underfoot. Color palette: deep cyan shadows (#1a3a4a), warm amber practicals (#d4a574), and clinical white highlights (#e8e8e8). Grade: Tobacco & Teal with crushed blacks and halation on the highlights. The overall feeling: isolation wrapped in beauty, a woman about to step into darkness. Shot on ARRI Alexa 65, 800 ISO, subtle 1/4 Black Pro-Mist filtration for atmosphere. Camera holds static for 4 seconds, then begins an imperceptibly slow push-in (1 inch per second on a Dana Dolly). Film grain: medium-fine, reminiscent of Fincher's 'Zodiac'."
+
+OUTPUT FORMAT - Return ONLY this JSON array:
 [
   {
     "sceneNumber": 1,
-    "lineReference": "The exact quote from the chapter this scene depicts - include 1-2 full sentences",
-    "visualPrompt": "A comprehensive 150+ word cinematic description. Example: 'Wide establishing shot of a dimly lit 1940s detective office. JOHN HARRIS, 45, weathered face with salt-and-pepper stubble, wearing a rumpled brown suit and loosened tie, sits behind a cluttered mahogany desk. Warm tungsten key light streams through venetian blinds casting dramatic noir shadows across his face. Rain patters against the window, droplets catching the amber glow of a desk lamp. He holds a yellowed photograph, his calloused fingers trembling slightly. The camera slowly dollies in, shifting from wide to medium close-up. Shallow depth of field isolates his pained expression against the blurred chaos of scattered case files. Cool blue moonlight from outside contrasts with the warm interior, creating a melancholic color palette. Dust particles float in the light beams. Film grain texture, Kodak 5219 color science, anamorphic lens flare.'",
-    "mood": "melancholic/tense/hopeful/dramatic/mysterious/romantic/etc",
-    "cameraWork": "Specific camera technique: Steadicam tracking shot / Crane shot descending / Handheld close-up / Dolly zoom / etc",
-    "characters": ["Character names appearing in this scene"],
-    "setting": "Brief setting description for this specific scene"
+    "lineReference": "Exact 1-3 sentence quote from the chapter text",
+    "visualPrompt": "YOUR 250+ WORD MASTERPIECE DESCRIPTION",
+    "mood": "Primary emotion / Secondary undertone (e.g., 'Melancholic / Quietly Defiant')",
+    "cameraWork": "Specific technique with details (e.g., 'Steadicam push-in at 2ft/sec, 35mm anamorphic, f/2.0')",
+    "lightingSetup": "Key: direction/temp, Fill: ratio, Practicals: what/where",
+    "colorPalette": "Three primary colors with descriptions",
+    "soundscape": "Implied ambient audio for this visual",
+    "duration": "Suggested shot duration in seconds",
+    "characters": ["Names of characters visible"],
+    "setting": "Specific location description"
   }
 ]
 
-CRITICAL RULES:
-- Each visualPrompt MUST be 150+ words with rich, specific detail
-- Character descriptions must remain CONSISTENT across all scenes
-- Include specific film terminology (dolly, crane, steadicam, rack focus, etc.)
-- Reference real cinematography styles (Roger Deakins, Vittorio Storaro, etc.)
-- Every prompt must be immediately usable for AI video generation
+CRITICAL: Write prompts so detailed that a filmmaker could recreate the EXACT image. No vague descriptions. Every element specified. This is cinema.
 
-Return ONLY the JSON array, no other text.`
+Return ONLY the JSON array.`
         }]
       });
 

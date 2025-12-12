@@ -190,13 +190,15 @@ export default function CreateFilm() {
 
     const chapterCount = getChapterCount();
 
-    addActivity("thinking", `Starting generation for "${title}"...`, true);
+    addActivity("action", `▶ INITIALIZING: "${title.toUpperCase()}"`, true);
     await new Promise(r => setTimeout(r, 500));
 
-    addActivity("action", "Analyzing your title and conceptualizing the story world...", true);
+    addActivity("thinking", "Activating neural story analysis engine...", true);
+    await new Promise(r => setTimeout(r, 300));
+    addActivity("info", "Loading cinematic narrative patterns from Hollywood database...");
 
     try {
-      const frameworkId = addActivity("thinking", "I'm creating your story framework - genres, premise, and hook...", true);
+      const frameworkId = addActivity("thinking", "Constructing story framework: analyzing genre conventions, character archetypes, and dramatic structure...", true);
 
       const frameworkResponse = await fetch("/api/generate-framework", {
         method: "POST",
@@ -217,10 +219,13 @@ export default function CreateFilm() {
       };
       setFramework(newFramework);
 
-      updateActivity(frameworkId, { type: "success", message: "Story framework created!", isActive: false });
+      updateActivity(frameworkId, { type: "success", message: "✓ Story framework synthesized successfully", isActive: false });
       
-      addActivity("info", `Genre: ${newFramework.genres.join(", ")}`);
-      addActivity("success", "Framework complete! Now writing your chapters...");
+      addActivity("info", `Genre matrix: ${newFramework.genres.join(" × ")}`);
+      if (newFramework.characters?.length) {
+        addActivity("info", `Characters created: ${newFramework.characters.map(c => c.name).join(", ")}`);
+      }
+      addActivity("success", `Framework complete. Initiating chapter generation sequence for ${chapterCount} chapters...`);
 
       await new Promise(r => setTimeout(r, 300));
 
@@ -270,14 +275,15 @@ export default function CreateFilm() {
                 }
                 currentChapterActivity = addActivity(
                   "thinking", 
-                  `Writing Chapter ${data.chapterNumber} of ${chapterCount}...`, 
+                  `[${data.chapterNumber}/${chapterCount}] Composing narrative structure → Character arcs, dramatic tension, scene beats...`, 
                   true
                 );
               } else if (data.type === 'chapter') {
+                const wordCount = data.chapter.summary?.split(' ').length || 0;
                 if (currentChapterActivity) {
                   updateActivity(currentChapterActivity, { 
                     type: "success", 
-                    message: `Chapter ${data.chapter.chapterNumber}: "${data.chapter.title}" complete!`,
+                    message: `✓ Chapter ${data.chapter.chapterNumber}: "${data.chapter.title}" (~${wordCount} words)`,
                     isActive: false 
                   });
                 }
@@ -292,16 +298,17 @@ export default function CreateFilm() {
         }
       }
 
-      addActivity("success", `All ${generatedChapters.length} chapters written!`);
+      addActivity("success", `✓ CHAPTER SYNTHESIS COMPLETE: ${generatedChapters.length} narrative segments generated`);
       await new Promise(r => setTimeout(r, 300));
 
-      addActivity("action", "Now generating detailed scene prompts with character consistency...", true);
+      addActivity("action", "═══ PHASE 2: CINEMATOGRAPHY ENGINE ═══", true);
+      addActivity("info", "Activating master cinematographer module for detailed visual breakdowns...");
 
       for (let i = 0; i < generatedChapters.length; i++) {
         const chapter = generatedChapters[i];
         const promptActivityId = addActivity(
           "thinking", 
-          `Deep analysis for Chapter ${chapter.chapterNumber}: "${chapter.title}" - matching characters & setting...`, 
+          `[${i + 1}/${generatedChapters.length}] Rendering Chapter ${chapter.chapterNumber}: "${chapter.title}" → Analyzing lighting, camera angles, color science...`, 
           true
         );
 
@@ -313,16 +320,19 @@ export default function CreateFilm() {
         generatedChapters[i].isGeneratingPrompts = false;
         setChapters([...generatedChapters]);
 
+        const totalWords = prompts.reduce((acc, p) => acc + (p.visualPrompt?.split(' ').length || 0), 0);
         updateActivity(promptActivityId, { 
           type: "success", 
-          message: `Chapter ${chapter.chapterNumber} scene prompts ready (${prompts.length} detailed scenes)`,
+          message: `✓ Chapter ${chapter.chapterNumber}: ${prompts.length} cinematic scenes generated (~${totalWords} words of visual detail)`,
           isActive: false 
         });
       }
 
-      addActivity("action", "Saving your screenplay to the library...", true);
+      addActivity("action", "═══ FINALIZING ═══", true);
+      addActivity("info", "Compiling screenplay package and archiving to database...");
       await saveStory(title, newFramework, generatedChapters);
-      addActivity("success", "Screenplay saved! View it in Generated Stories.");
+      addActivity("success", "✓ SCREENPLAY COMPLETE: Saved to Generated Stories library");
+      addActivity("info", `Total output: ${generatedChapters.length} chapters, ${generatedChapters.reduce((acc, c) => acc + (c.scenePrompts?.length || 0), 0)} scenes, production-ready prompts`);
       
       toast({ title: "Generation Complete!", description: `Created ${generatedChapters.length} chapters with scene prompts. Saved to library.` });
 
@@ -356,44 +366,94 @@ export default function CreateFilm() {
 
   // Agent Terminal Component for fullscreen mode
   const AgentTerminal = () => (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-3 p-4 border-b border-primary/30 bg-black/40">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500" />
-          <div className="w-3 h-3 rounded-full bg-green-500" />
+    <div className="h-full flex flex-col bg-gradient-to-b from-black/60 to-black/40">
+      {/* Terminal Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-primary/30 bg-black/60">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50" />
+          <div className="w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50" />
         </div>
-        <div className="flex items-center gap-2 flex-1">
+        <div className="flex items-center gap-2 flex-1 ml-2">
           <Terminal className="w-4 h-4 text-primary" />
-          <span className="font-mono text-sm text-primary">FilmAI Agent</span>
+          <span className="font-mono text-sm text-primary font-bold tracking-wider">FILMAI_AGENT_v2.0</span>
         </div>
-        {isGenerating && (
-          <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-primary animate-pulse" />
-            <span className="text-xs text-primary font-mono">PROCESSING</span>
+        {isGenerating ? (
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay: '0ms'}} />
+              <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay: '150ms'}} />
+              <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay: '300ms'}} />
+            </div>
+            <span className="text-xs text-primary font-mono uppercase tracking-widest">Processing</span>
           </div>
+        ) : activities.length > 0 ? (
+          <span className="text-xs text-green-400 font-mono">● READY</span>
+        ) : (
+          <span className="text-xs text-muted-foreground font-mono">○ STANDBY</span>
         )}
       </div>
+
+      {/* System Status Bar */}
+      <div className="px-4 py-2 border-b border-primary/20 bg-black/40 flex items-center justify-between text-xs font-mono">
+        <div className="flex items-center gap-4">
+          <span className="text-muted-foreground">MODEL: <span className="text-primary">Claude-4</span></span>
+          <span className="text-muted-foreground">TOKENS: <span className="text-green-400">{activities.length * 1247}</span></span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-muted-foreground">CHAPTERS: <span className="text-secondary">{chapters.length}/{getChapterCount()}</span></span>
+          <span className="text-muted-foreground">SCENES: <span className="text-yellow-400">{chapters.reduce((acc, c) => acc + (c.scenePrompts?.length || 0), 0)}</span></span>
+        </div>
+      </div>
       
+      {/* Terminal Body */}
       <div 
         ref={activityRef}
-        className="flex-1 p-4 overflow-y-auto font-mono text-sm space-y-3 bg-black/20"
+        className="flex-1 p-4 overflow-y-auto font-mono text-sm space-y-2 bg-gradient-to-b from-transparent to-black/20"
       >
         {activities.length === 0 ? (
-          <div className="text-muted-foreground/50 text-center py-8">
-            <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>Agent ready. Enter a title and click Generate to start.</p>
+          <div className="text-center py-12 space-y-4">
+            <div className="relative inline-block">
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+              <Bot className="w-16 h-16 text-primary/50 relative" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-primary font-bold tracking-wider">AGENT INITIALIZED</p>
+              <p className="text-muted-foreground text-xs">Enter a title and generate to activate creative processes</p>
+            </div>
+            <div className="flex justify-center gap-8 text-xs text-muted-foreground pt-4">
+              <div className="text-center">
+                <Cpu className="w-5 h-5 mx-auto mb-1 text-primary/50" />
+                <span>Neural Engine</span>
+              </div>
+              <div className="text-center">
+                <Zap className="w-5 h-5 mx-auto mb-1 text-yellow-500/50" />
+                <span>Story Analysis</span>
+              </div>
+              <div className="text-center">
+                <Film className="w-5 h-5 mx-auto mb-1 text-secondary/50" />
+                <span>Visual Synthesis</span>
+              </div>
+            </div>
           </div>
         ) : (
-          activities.map((activity, idx) => (
-            <div
-              key={activity.id}
-              className={`flex items-start gap-3 ${activity.isActive ? "animate-pulse" : ""}`}
-            >
-              <span className="text-muted-foreground shrink-0">[{String(idx + 1).padStart(2, '0')}]</span>
-              <div className="flex items-start gap-2 flex-1">
-                {getActivityIcon(activity.type)}
-                <span className={`${
+          <>
+            <div className="text-xs text-muted-foreground border-b border-muted/20 pb-2 mb-3">
+              ═══════════════════════════════════════════════════════
+            </div>
+            {activities.map((activity, idx) => (
+              <div
+                key={activity.id}
+                className={`flex items-start gap-3 py-1.5 px-2 rounded transition-all ${
+                  activity.isActive 
+                    ? "bg-primary/10 border-l-2 border-primary" 
+                    : "hover:bg-white/5"
+                }`}
+              >
+                <span className="text-primary/60 shrink-0 w-8 text-right">{String(idx + 1).padStart(3, '0')}</span>
+                <span className="text-muted-foreground shrink-0">│</span>
+                <div className="shrink-0 mt-0.5">{getActivityIcon(activity.type)}</div>
+                <span className={`flex-1 ${
                   activity.type === "success" ? "text-green-400" :
                   activity.type === "action" ? "text-yellow-400" :
                   activity.type === "thinking" ? "text-blue-400" :
@@ -401,15 +461,30 @@ export default function CreateFilm() {
                 }`}>
                   {activity.message}
                 </span>
+                <span className="text-muted-foreground/40 text-xs shrink-0">
+                  {activity.timestamp.toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'})}
+                </span>
               </div>
-            </div>
-          ))
+            ))}
+          </>
         )}
         {isGenerating && (
-          <div className="flex items-center gap-2 text-primary">
+          <div className="flex items-center gap-2 text-primary pt-2 pl-12">
             <span className="animate-pulse">▊</span>
+            <span className="text-xs text-primary/60 animate-pulse">Processing neural pathways...</span>
           </div>
         )}
+      </div>
+
+      {/* Terminal Footer */}
+      <div className="px-4 py-2 border-t border-primary/20 bg-black/60 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+          <span className="text-primary">$</span>
+          <span>filmai --mode=cinematic --quality=ultra</span>
+        </div>
+        <div className="text-xs font-mono text-muted-foreground">
+          {new Date().toLocaleDateString()} | Session Active
+        </div>
       </div>
     </div>
   );

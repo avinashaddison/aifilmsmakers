@@ -4309,8 +4309,8 @@ async function runFilmGenerationPipeline(filmId: string) {
             },
             body: JSON.stringify({
               prompt: typeof frame.prompt === 'string' ? frame.prompt : String(frame.prompt || ''),
-              model: "higgsfield_v1",
-              duration: 5 // higgsfield_v1 requires duration between 5-15 seconds
+              model: "nanobanana-video", // Using nanobanana-video as it's currently the most reliable free model
+              duration: 5
             })
           });
 
